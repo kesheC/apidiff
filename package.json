@@ -42,6 +42,10 @@
     "zero-dependencies"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kesheC/apidiff.git"
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
