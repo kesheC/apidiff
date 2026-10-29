@@ -1,0 +1,86 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Users API",
+    "version": "2.0.0"
+  },
+  "paths": {
+    "/users/{id}": {
+      "get": {
+        "operationId": "fetchUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "verbose",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "nickname"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin"
+            ]
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 18,
+            "maximum": 150
+          }
+        }
+      }
+    }
+  }
+}

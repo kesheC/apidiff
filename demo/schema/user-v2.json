@@ -1,0 +1,1 @@
+{"type":"object","properties":{"id":{"type":"string"},"age":{"type":"integer","minimum":18}},"required":["id","age"]}

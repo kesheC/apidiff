@@ -1,0 +1,50 @@
+{
+  "name": "apidiff",
+  "version": "0.1.0",
+  "description": "Semver verdict for API contract changes — diff two JSON Schemas or OpenAPI 3.x documents and get a major/minor/none answer plus a readable list of breaking changes.",
+  "type": "module",
+  "bin": {
+    "apidiff": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "dev": "node --experimental-strip-types src/cli.ts"
+  },
+  "keywords": [
+    "api",
+    "semver",
+    "breaking-changes",
+    "openapi",
+    "json-schema",
+    "diff",
+    "compatibility",
+    "cli",
+    "ci",
+    "zero-dependencies"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

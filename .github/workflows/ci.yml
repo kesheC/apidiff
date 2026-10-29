@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+      # Smoke-test the transcripts the README quotes, so documentation drift
+      # fails the build instead of misleading a reader.
+      - name: README demo transcripts still reproduce
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          out=$(node dist/cli.js demo/users-v1.json demo/users-v2.json)
+          code=$?
+          set -e
+          echo "$out"
+          test "$code" = "1"
+          echo "$out" | grep -q "verdict: breaking (major)"
+          echo "$out" | grep -q "\[openapi.operation.removed\]"
+          test "$(node dist/cli.js --quiet demo/users-v1.json demo/users-v2.json)" = "breaking (major)"
+          node dist/cli.js --contract env demo/env/app-v1.env demo/env/app-v2.env >/dev/null 2>&1 && exit 1 || true
+          test "$(node dist/cli.js --rules | tail -n +3 | grep -c .)" = "56"
