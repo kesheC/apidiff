@@ -344,6 +344,11 @@ ignored — otherwise every doc typo would demand a release.
 3.1's `type: ["string", "null"]` array form and `nullable` are not fully
 equivalent, and the tool does not pretend otherwise.
 
+## Security and changes / 安全与变更
+
+发现安全问题请**不要**开公开 issue —— [SECURITY.md](SECURITY.md) 说明了私密上报渠道以及
+需要提供哪些信息。每个版本的改动都记在 [CHANGELOG.md](CHANGELOG.md)。
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
