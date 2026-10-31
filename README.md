@@ -38,6 +38,18 @@ $ apidiff --version
 0.1.3
 ```
 
+Every release publishes the same tarball under a stable name (`apidiff.tgz`) alongside an
+`apidiff.tgz.sha256` checksum. To verify the download before running it:
+
+```bash
+curl -sLO https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
+curl -sLO https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz.sha256
+sha256sum -c apidiff.tgz.sha256          # apidiff.tgz: OK
+npm install -g ./apidiff.tgz
+```
+
+On macOS use `shasum -a 256 -c apidiff.tgz.sha256` — there is no `sha256sum` by default.
+
 As a project dev dependency / 装成项目依赖：
 
 ```console
