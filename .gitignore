@@ -3,5 +3,7 @@ dist/
 *.tgz
 coverage/
 demo/tmp/
+# written by the CI package-contents assertion
+pack-meta.json
 .DS_Store
 Thumbs.db
