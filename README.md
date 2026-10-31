@@ -29,19 +29,33 @@ same inputs produce byte-identical output, so it can gate CI.
 
 ## Install / 安装
 
-From the repository (the `prepare` script compiles it, so there is no separate build step):
+`apidiff` is **not published to the npm registry** — that name belongs to an
+unrelated package. Each release ships a tarball you can install directly:
 
 ```console
-$ npm install --save-dev github:kesheC/apidiff
+$ npm install -g https://github.com/kesheC/apidiff/releases/download/v0.1.1/apidiff-0.1.1.tgz
+$ apidiff --version
+0.1.1
 ```
 
-Or run it without installing:
+As a project dev dependency / 装成项目依赖：
 
 ```console
-$ npx --yes github:kesheC/apidiff --help
+$ npm install -D https://github.com/kesheC/apidiff/releases/download/v0.1.1/apidiff-0.1.1.tgz
+$ npx apidiff old.json new.json
 ```
 
-Node.js >= 20. No runtime dependencies.
+Or build it from a checkout / 或从源码编译：
+
+```console
+$ git clone https://github.com/kesheC/apidiff.git && cd apidiff
+$ npm ci && npm run build && npm link
+```
+
+Node.js >= 20.11. No runtime dependencies.
+
+> `npm install -g git+https://github.com/...` does **not** work on npm 11: a global
+> install skips `devDependencies`, so the `prepare` build finds no `tsc`.
 
 ## Quick start / 60 秒上手
 

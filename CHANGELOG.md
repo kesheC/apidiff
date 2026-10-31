@@ -1,0 +1,61 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.1] - 2026-10-31
+
+### Fixed
+
+- **Install instructions that could not work.** The README told you to run
+  `npm install -g github:kesheC/apidiff`, which resolves to an SSH URL, and in
+  the case of `apidiff` also implied an npm registry package that does not exist.
+  Both paths are gone. The documented install path is now the release tarball,
+  which is built, smoke-tested and uploaded by CI on every tag.
+
+### Added
+
+- `.github/workflows/release.yml`: on a `v*` tag, build, test, `npm pack`, install
+  the resulting tarball in a clean directory, run the packaged binary, then upload
+  the tarball and its `.sha256` to the GitHub Release.
+- `SECURITY.md` with a supported-versions table, a private reporting channel and an
+  explicit in-scope / out-of-scope list.
+- `prepare` script so a checkout builds itself on install.
+- `author`, `bugs` and `homepage` fields in `package.json`.
+
+### Changed
+
+- `engines.node` is now `>=20.11` for every release artefact, matching the oldest
+  Node version the test matrix exercises.
+
+### Removed
+
+- npm registry badges and `npm install -D apidiff` snippets that pointed at an
+  unrelated (or non-existent) registry package.
+
+## [0.1.0] - 2026-10-29
+
+### Added
+
+- Initial release: Semver verdict for API contract changes: diff two JSON Schemas or OpenAPI 3.x documents and get a major/minor/none answer plus a readable list of breaking changes.
+
+- Diffs two JSON Schemas or two OpenAPI 3.x documents and classifies every change as breaking, deprecation or non-breaking.
+- Prints the semver verdict (major / minor / none) alongside the change list.
+- `--contract auto|schema|openapi|env` selects the parser; `--format text|json|markdown` selects the output.
+- `--fail-on breaking|deprecation|never` makes CI gates configurable; `--allow-breaking` for an explicit escape hatch.
+- `--rules` lists every rule with its id and default severity.
+- `--contract env` diffs two `.env` files for changed or removed keys.
+
+### Quality
+
+- 129 tests across 7 spec files, 2082 lines of TypeScript.
+- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- Zero runtime dependencies.
+
+[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/kesheC/apidiff/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/kesheC/apidiff/releases/tag/v0.1.0
