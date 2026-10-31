@@ -6,15 +6,16 @@
  * no diff logic so it cannot drift from the exported API.
  */
 import { readFileSync, realpathSync } from "node:fs";
+import { basename } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { diffDetect, diffEnv } from "./index.js";
+import { UsageError } from "./errors.js";
+import { diffDetect, diffEnv, exitCodeOf } from "./index.js";
 import { diffOpenApi } from "./openapi-diff.js";
 import { formatJson, formatMarkdown, formatRules, formatText } from "./report.js";
 import { diffSchemas } from "./schema-diff.js";
 import type { Finding } from "./types.js";
-import { exitCodeOf } from "./index.js";
 import { verdictOf, type FailOn } from "./verdict.js";
 import { getVersion } from "./version.js";
 
@@ -34,12 +35,18 @@ interface CliOptions {
   allowBreaking: boolean;
 }
 
+/** Where a run writes. Two sinks so errors can leave on stderr. */
+export interface Sinks {
+  stdout: (line: string) => void;
+  stderr: (line: string) => void;
+}
+
 const HELP = [
   "apidiff — semver verdict for API contract changes",
   "",
   "Usage:",
   "  apidiff <old.json> <new.json> [options]",
-  "  apidiff --contract env <old.env> <new.env>",
+  "  apidiff <old.env> <new.env> [options]",
   "",
   "Options:",
   "  --contract <auto|schema|openapi|env>  Document family to compare (default: auto)",
@@ -55,12 +62,11 @@ const HELP = [
   "Exit codes:",
   "  0  compatible, or nothing at or above --fail-on",
   "  1  a change at or above --fail-on was found",
-  "  2  the command itself failed (bad arguments, unreadable file, bad JSON)",
+  "  2  the command itself failed (bad arguments, unreadable file, bad document)",
   "",
-  "Both documents must be JSON (OpenAPI: convert YAML first, e.g. yq -o=json).",
+  "Documents are JSON (Schema or OpenAPI) or .env samples; auto-detects which.",
+  "OpenAPI must be JSON: convert YAML first, e.g. yq -o=json.",
 ].join("\n");
-
-class UsageError extends Error {}
 
 /** Parse argv. Throws UsageError for anything a user can fix. */
 export function parseArgs(argv: readonly string[]): CliOptions {
@@ -141,13 +147,30 @@ export function parseArgs(argv: readonly string[]): CliOptions {
   return options;
 }
 
-function readJson(path: string): unknown {
-  let text: string;
+/**
+ * Read a file as UTF-8 and refuse to guess.
+ *
+ * The previous implementation let Node substitute U+FFFD for malformed bytes,
+ * which turned a corrupt contract into a silently "compatible" diff. Decoding
+ * with `fatal: true` makes that a loud error instead.
+ */
+function readSource(path: string): string {
+  let bytes: Buffer;
   try {
-    text = readFileSync(path, "utf8");
+    bytes = readFileSync(path);
   } catch {
     throw new UsageError("cannot read " + path);
   }
+  try {
+    // ignoreBOM keeps a leading BOM in the text, so a BOM-prefixed file still
+    // fails JSON.parse instead of silently changing meaning.
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    throw new UsageError(path + " is not valid UTF-8");
+  }
+}
+
+function parseJson(text: string, path: string): unknown {
   try {
     return JSON.parse(text);
   } catch (error) {
@@ -156,25 +179,101 @@ function readJson(path: string): unknown {
   }
 }
 
-function readText(path: string): string {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    throw new UsageError("cannot read " + path);
-  }
+function readJson(path: string): unknown {
+  return parseJson(readSource(path), path);
 }
 
-/** Run the CLI. Returns the process exit code; never calls process.exit. */
-export function run(argv: readonly string[], stdout: (line: string) => void): number {
+function readText(path: string): string {
+  return readSource(path);
+}
+
+/**
+ * The format the run should be reported in, even when argv never parses.
+ *
+ * `--format json` is a promise that stdout stays JSON; a bad flag must not be
+ * allowed to break that promise, so the hint is taken from argv directly.
+ */
+function formatHint(argv: readonly string[]): Format {
+  let hint: Format = "text";
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== "--format") continue;
+    const value = argv[index + 1];
+    if (value === "text" || value === "json" || value === "markdown") hint = value;
+    index += 1;
+  }
+  return hint;
+}
+
+/**
+ * Report a user-fixable failure.
+ *
+ * The human sentence always goes to stderr, so `2>/dev/null` hides it and a
+ * pipeline on stdout stays clean. When the caller asked for JSON, stdout gets a
+ * one-object error document instead of prose, so `| jq` keeps parsing.
+ */
+function failure(sinks: Sinks, format: Format, message: string, showHelp: boolean): number {
+  if (format === "json") {
+    sinks.stdout(JSON.stringify({ error: { message }, exitCode: 2 }));
+  }
+  sinks.stderr("error: " + message);
+  if (showHelp) sinks.stderr("run apidiff --help for usage");
+  return 2;
+}
+
+/** `.env`, `.env.local`, `app.env` — the names a dotenv sample actually uses. */
+function looksLikeEnvName(path: string): boolean {
+  const name = basename(path);
+  return /^\.env(\..+)?$/i.test(name) || /\.env$/i.test(name);
+}
+
+const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_.]*$/;
+
+/**
+ * Decide by content whether a file is a dotenv sample rather than JSON.
+ *
+ * Deliberately strict: no braces anywhere, and every meaningful line has to be
+ * `KEY=value` (with an optional leading `export `). JSON and YAML both fail
+ * that, so this cannot steal a document the JSON parser would have accepted.
+ */
+function looksLikeEnvText(text: string): boolean {
+  if (text.includes("{") || text.includes("}")) return false;
+  let assignments = 0;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    const body = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
+    const equals = body.indexOf("=");
+    if (equals < 0) return false;
+    if (!ENV_KEY.test(body.slice(0, equals).trim())) return false;
+    assignments += 1;
+  }
+  return assignments > 0;
+}
+
+/** Why a document is not a usable schema root, or undefined when it is one. */
+function schemaRootProblem(document: unknown): string | undefined {
+  if (typeof document === "boolean") return undefined;
+  if (Array.isArray(document)) return "an array";
+  if (document === null) return "null";
+  if (typeof document === "number") return "a number";
+  if (typeof document === "string") return "a string";
+  return undefined;
+}
+
+/**
+ * Run the CLI. Returns the process exit code; never calls process.exit.
+ *
+ * `stderr` defaults to `stdout` so a caller that only wants one stream (a log
+ * buffer, a test) keeps working.
+ */
+export function run(argv: readonly string[], stdout: (line: string) => void, stderr: (line: string) => void = stdout): number {
+  const sinks: Sinks = { stdout, stderr };
+
   let options: CliOptions;
   try {
     options = parseArgs(argv);
   } catch (error) {
-    if (error instanceof UsageError) {
-      stdout("error: " + error.message);
-      stdout("run apidiff --help for usage");
-      return 2;
-    }
+    if (error instanceof UsageError) return failure(sinks, formatHint(argv), error.message, true);
     throw error;
   }
 
@@ -192,31 +291,16 @@ export function run(argv: readonly string[], stdout: (line: string) => void): nu
   }
 
   if (options.oldPath === undefined || options.newPath === undefined) {
-    stdout("error: two files are required");
-    stdout("run apidiff --help for usage");
-    return 2;
+    return failure(sinks, options.format, "two files are required", true);
   }
+  const oldPath = options.oldPath;
+  const newPath = options.newPath;
 
   let findings: Finding[];
   try {
-    if (options.contract === "env") {
-      findings = diffEnv(readText(options.oldPath), readText(options.newPath)).findings;
-    } else {
-      const oldDocument = readJson(options.oldPath);
-      const newDocument = readJson(options.newPath);
-      if (options.contract === "schema") {
-        findings = diffSchemas(oldDocument, newDocument).findings;
-      } else if (options.contract === "openapi") {
-        findings = diffOpenApi(oldDocument, newDocument).findings;
-      } else {
-        findings = diffDetect(oldDocument, newDocument).findings;
-      }
-    }
+    findings = compare(options, oldPath, newPath);
   } catch (error) {
-    if (error instanceof UsageError) {
-      stdout("error: " + error.message);
-      return 2;
-    }
+    if (error instanceof UsageError) return failure(sinks, options.format, error.message, false);
     throw error;
   }
 
@@ -235,9 +319,59 @@ export function run(argv: readonly string[], stdout: (line: string) => void): nu
   return exitCodeOf(verdict, options.failOn);
 }
 
-/** Entry point used by the bin shim. Writes to stdout and sets no exit code. */
+/** Read both inputs, pick a differ, and return the findings. */
+function compare(options: CliOptions, oldPath: string, newPath: string): Finding[] {
+  if (options.contract === "env") {
+    return diffEnv(readText(oldPath), readText(newPath)).findings;
+  }
+
+  if (options.contract !== "auto") {
+    const oldDocument = readJson(oldPath);
+    const newDocument = readJson(newPath);
+    if (options.contract === "schema") {
+      assertSchemaRoot(oldDocument, oldPath);
+      assertSchemaRoot(newDocument, newPath);
+      return diffSchemas(oldDocument, newDocument).findings;
+    }
+    return diffOpenApi(oldDocument, newDocument).findings;
+  }
+
+  // auto: the text has to be read either way, so the dotenv check sees bytes
+  // rather than a file extension alone (a sample can be called anything).
+  const oldText = readText(oldPath);
+  const newText = readText(newPath);
+  const oldIsEnv = looksLikeEnvName(oldPath) || looksLikeEnvText(oldText);
+  const newIsEnv = looksLikeEnvName(newPath) || looksLikeEnvText(newText);
+
+  if (oldIsEnv && newIsEnv) return diffEnv(oldText, newText).findings;
+  if (oldIsEnv !== newIsEnv) {
+    const envPath = oldIsEnv ? oldPath : newPath;
+    const otherPath = oldIsEnv ? newPath : oldPath;
+    throw new UsageError(
+      envPath + " is an environment file but " + otherPath + " is not; pass --contract to say which family these files are",
+    );
+  }
+
+  const oldDocument = parseJson(oldText, oldPath);
+  const newDocument = parseJson(newText, newPath);
+  assertSchemaRoot(oldDocument, oldPath);
+  assertSchemaRoot(newDocument, newPath);
+  return diffDetect(oldDocument, newDocument).findings;
+}
+
+function assertSchemaRoot(document: unknown, path: string): void {
+  const problem = schemaRootProblem(document);
+  if (problem === undefined) return;
+  throw new UsageError(path + " is not a JSON Schema (root is " + problem + ")");
+}
+
+/** Entry point used by the bin shim. Writes to both streams and sets no exit code. */
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
-  return run(argv, (line) => process.stdout.write(line + "\n"));
+  return run(
+    argv,
+    (line) => process.stdout.write(line + "\n"),
+    (line) => process.stderr.write(line + "\n"),
+  );
 }
 
 // realpathSync on both sides: npm links the bin shim to this file, so
