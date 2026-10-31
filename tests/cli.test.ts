@@ -14,11 +14,26 @@ const file = (name: string, body: unknown): string => {
   return path;
 };
 
-/** Run the CLI and collect the transcript plus the exit code. */
-function cli(...argv: string[]): { code: number; out: string } {
-  const lines: string[] = [];
-  const code = run(argv, (line) => lines.push(line));
-  return { code, out: lines.join("\n") };
+/**
+ * Run the CLI, collecting stdout and stderr separately.
+ *
+ * They are kept apart on purpose: the verdict owns stdout and every failure
+ * belongs on stderr, so a test that merges them cannot tell the two apart.
+ */
+function cli(...argv: string[]): { code: number; out: string; err: string } {
+  const out: string[] = [];
+  const err: string[] = [];
+  const code = run(
+    argv,
+    (line) => out.push(line),
+    (line) => err.push(line),
+  );
+  return { code, out: out.join("\n"), err: err.join("\n") };
+}
+
+/** A run that must print nothing on stdout: failures never pollute the pipe. */
+function expectSilentStdout(result: { out: string }): void {
+  expect(result.out).toBe("");
 }
 
 const oldSchema = { type: "object", properties: { id: { type: "string" } }, required: ["id"] };
@@ -86,26 +101,30 @@ describe("cli behaviour", () => {
   it("exits 2 without documents", () => {
     const result = cli();
     expect(result.code).toBe(2);
-    expect(result.out).toContain("two files are required");
+    expectSilentStdout(result);
+    expect(result.err).toContain("two files are required");
   });
 
   it("exits 2 for a bad flag", () => {
     const result = cli("--format", "yaml");
     expect(result.code).toBe(2);
-    expect(result.out).toContain("--format expects");
-    expect(result.out).toContain("run apidiff --help for usage");
+    expectSilentStdout(result);
+    expect(result.err).toContain("--format expects");
+    expect(result.err).toContain("run apidiff --help for usage");
   });
 
   it("exits 2 for a missing file", () => {
     const result = cli(join(dir, "nope.json"), join(dir, "nope2.json"));
     expect(result.code).toBe(2);
-    expect(result.out).toContain("cannot read");
+    expectSilentStdout(result);
+    expect(result.err).toContain("cannot read");
   });
 
   it("exits 2 for invalid JSON", () => {
     const result = cli(file("broken.json", "{ not json"), file("ok.json", oldSchema));
     expect(result.code).toBe(2);
-    expect(result.out).toContain("invalid JSON in");
+    expectSilentStdout(result);
+    expect(result.err).toContain("invalid JSON in");
   });
 
   it("exits 0 and says compatible when nothing changed", () => {
