@@ -5,6 +5,7 @@
  * Everything interesting lives in the library; this file deliberately contains
  * no diff logic so it cannot drift from the exported API.
  */
+import { constants as bufferConstants } from "node:buffer";
 import { readFileSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
 import process from "node:process";
@@ -161,22 +162,51 @@ function readSource(path: string): string {
   } catch {
     throw new UsageError("cannot read " + path);
   }
+  return decodeUtf8(bytes, path);
+}
+
+/** V8's ceiling on a single string; above it nothing can be decoded at all. */
+export const MAX_TEXT_BYTES = bufferConstants.MAX_STRING_LENGTH;
+
+/**
+ * Decode bytes as UTF-8, giving each failure its own message.
+ *
+ * Two very different things used to share one sentence: a file with broken
+ * bytes, and a perfectly valid file too large for V8 to hold as a single
+ * string (ERR_STRING_TOO_LONG). Telling a user their 1 GB JSON is "not valid
+ * UTF-8" sends them off to repair a file that is fine -- and a file whose
+ * bytes are genuinely malformed gets the detail it deserves.
+ */
+export function decodeUtf8(bytes: Buffer, path: string): string {
   try {
     // ignoreBOM keeps a leading BOM in the text, so a BOM-prefixed file still
     // fails JSON.parse instead of silently changing meaning.
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-  } catch {
+  } catch (error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === "ERR_STRING_TOO_LONG") {
+      throw new UsageError(
+        path + " is too large to compare (" + bytes.byteLength + " bytes; the text limit is " + MAX_TEXT_BYTES + ")",
+      );
+    }
     throw new UsageError(path + " is not valid UTF-8");
   }
 }
 
-function parseJson(text: string, path: string): unknown {
+type Parsed = { ok: true; document: unknown } | { ok: false; message: string };
+
+function tryParseJson(text: string): Parsed {
   try {
-    return JSON.parse(text);
+    return { ok: true, document: JSON.parse(text) as unknown };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new UsageError("invalid JSON in " + path + ": " + message);
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
   }
+}
+
+function parseJson(text: string, path: string): unknown {
+  const parsed = tryParseJson(text);
+  if (!parsed.ok) throw new UsageError("invalid JSON in " + path + ": " + parsed.message);
+  return parsed.document;
 }
 
 function readJson(path: string): unknown {
@@ -248,6 +278,32 @@ function looksLikeEnvText(text: string): boolean {
     assignments += 1;
   }
   return assignments > 0;
+}
+
+type AutoSide =
+  | { kind: "document"; document: unknown }
+  | { kind: "env" }
+  | { kind: "unparsed"; message: string };
+
+/** Narrow for the mixed-family check: only an env side can mismatch. */
+function isEnv(side: AutoSide): boolean {
+  return side.kind === "env";
+}
+
+/**
+ * Classify one side of an auto-detected comparison.
+ *
+ * Content is authoritative: if the bytes parse as JSON, this is a document,
+ * full stop. The filename only gets a vote once JSON parsing has already
+ * failed, which is the case a dotenv sample is actually in. That ordering is
+ * what keeps `.env.schema.json` (a real schema whose name happens to start
+ * with `.env`) out of the environment differ.
+ */
+function autoSide(text: string, path: string): AutoSide {
+  const parsed = tryParseJson(text);
+  if (parsed.ok) return { kind: "document", document: parsed.document };
+  if (looksLikeEnvName(path) || looksLikeEnvText(text)) return { kind: "env" };
+  return { kind: "unparsed", message: parsed.message };
 }
 
 /** Why a document is not a usable schema root, or undefined when it is one. */
@@ -336,27 +392,32 @@ function compare(options: CliOptions, oldPath: string, newPath: string): Finding
     return diffOpenApi(oldDocument, newDocument).findings;
   }
 
-  // auto: the text has to be read either way, so the dotenv check sees bytes
-  // rather than a file extension alone (a sample can be called anything).
+  // auto: content decides first, so a file that is valid JSON is diffed as a
+  // document no matter what it is called. A name is only a label for bytes
+  // the JSON parser has already refused -- otherwise `.env.schema.json`
+  // holding a perfectly good schema would be read as environment keys.
   const oldText = readText(oldPath);
   const newText = readText(newPath);
-  const oldIsEnv = looksLikeEnvName(oldPath) || looksLikeEnvText(oldText);
-  const newIsEnv = looksLikeEnvName(newPath) || looksLikeEnvText(newText);
+  const oldSide = autoSide(oldText, oldPath);
+  const newSide = autoSide(newText, newPath);
 
-  if (oldIsEnv && newIsEnv) return diffEnv(oldText, newText).findings;
-  if (oldIsEnv !== newIsEnv) {
-    const envPath = oldIsEnv ? oldPath : newPath;
-    const otherPath = oldIsEnv ? newPath : oldPath;
+  if (oldSide.kind === "env" && newSide.kind === "env") return diffEnv(oldText, newText).findings;
+  if (isEnv(oldSide) !== isEnv(newSide)) {
+    const envPath = isEnv(oldSide) ? oldPath : newPath;
+    const otherPath = isEnv(oldSide) ? newPath : oldPath;
     throw new UsageError(
       envPath + " is an environment file but " + otherPath + " is not; pass --contract to say which family these files are",
     );
   }
+  if (oldSide.kind === "unparsed") throw new UsageError("invalid JSON in " + oldPath + ": " + oldSide.message);
+  if (newSide.kind === "unparsed") throw new UsageError("invalid JSON in " + newPath + ": " + newSide.message);
+  if (oldSide.kind !== "document" || newSide.kind !== "document") {
+    throw new UsageError("internal error: unresolved contract family");
+  }
 
-  const oldDocument = parseJson(oldText, oldPath);
-  const newDocument = parseJson(newText, newPath);
-  assertSchemaRoot(oldDocument, oldPath);
-  assertSchemaRoot(newDocument, newPath);
-  return diffDetect(oldDocument, newDocument).findings;
+  assertSchemaRoot(oldSide.document, oldPath);
+  assertSchemaRoot(newSide.document, newPath);
+  return diffDetect(oldSide.document, newSide.document).findings;
 }
 
 function assertSchemaRoot(document: unknown, path: string): void {
@@ -365,13 +426,30 @@ function assertSchemaRoot(document: unknown, path: string): void {
   throw new UsageError(path + " is not a JSON Schema (root is " + problem + ")");
 }
 
-/** Entry point used by the bin shim. Writes to both streams and sets no exit code. */
+/** The real process streams, as sinks. */
+const PROCESS_SINKS: Sinks = {
+  stdout: (line) => process.stdout.write(line + "\n"),
+  stderr: (line) => process.stderr.write(line + "\n"),
+};
+
+/**
+ * Entry point used by the bin shim. Writes to both streams and sets no exit code.
+ *
+ * The catch is the last line of defence, and it exists for one reason: exit
+ * code 1 means "a change at or above --fail-on was found". Anything that
+ * escapes the diff engine is a bug in this program, and letting it unwind
+ * made the process die with exit 1 and an empty stdout -- a crashed stack
+ * overflow reported to CI as a breaking API change. Every escape now lands on
+ * the documented contract: exit 2, a human line on stderr, and a single JSON
+ * error object on stdout when the caller asked for JSON.
+ */
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
-  return run(
-    argv,
-    (line) => process.stdout.write(line + "\n"),
-    (line) => process.stderr.write(line + "\n"),
-  );
+  try {
+    return run(argv, PROCESS_SINKS.stdout, PROCESS_SINKS.stderr);
+  } catch (error) {
+    const detail = error instanceof Error ? error.name + ": " + error.message : String(error);
+    return failure(PROCESS_SINKS, formatHint(argv), "internal error: " + detail, false);
+  }
 }
 
 // realpathSync on both sides: npm links the bin shim to this file, so
