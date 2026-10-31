@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { bumpOf, severitiesAtOrAbove, shouldFail, verdictOf } from "../src/verdict.js";
-import type { Finding, Severity } from "../src/types.js";
+import type { Finding } from "../src/types.js";
+import type { RuleId, Severity } from "../src/rules.js";
 
 const finding = (severity: Severity, rule: string, pointer = "/a"): Finding => ({
   id: rule + "@" + pointer,
-  rule,
+  // Synthetic ids here exercise the ordering, not the rule table.
+  rule: rule as RuleId,
   severity,
   pointer,
   message: rule,

@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import { diffEnv, parseEnvKeys } from "../src/env-diff.js";
 import { countBySeverity, formatJson, formatMarkdown, formatRules, formatText } from "../src/report.js";
 import { verdictOf } from "../src/verdict.js";
-import type { Finding, Severity } from "../src/types.js";
+import type { Finding } from "../src/types.js";
+import type { RuleId, Severity } from "../src/rules.js";
 
 const finding = (severity: Severity, rule: string, pointer: string, message = rule): Finding => ({
   id: rule + "@" + pointer,
-  rule,
+  // Synthetic ids here exercise the formatter, not the rule table.
+  rule: rule as RuleId,
   severity,
   pointer,
   message,
