@@ -1,6 +1,6 @@
 {
   "name": "apidiff",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Semver verdict for API contract changes — diff two JSON Schemas or OpenAPI 3.x documents and get a major/minor/none answer plus a readable list of breaking changes.",
   "type": "module",
   "bin": {

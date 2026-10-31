@@ -35,7 +35,7 @@ unrelated package. Each release ships a tarball you can install directly:
 ```console
 $ npm install -g https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
 $ apidiff --version
-0.1.3
+0.1.4
 ```
 
 Every release publishes the same tarball under a stable name (`apidiff.tgz`) alongside an
