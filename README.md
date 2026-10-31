@@ -91,7 +91,8 @@ verdict: breaking (major)
 Exit code `1` means "the bump you need is a major one". Drop it in CI:
 
 ```console
-$ apidiff demo/schema/user-v1.json demo/schema/user-v2.json || echo "this is a major release"
+$ apidiff demo/schema/user-v1.json demo/schema/user-v2.json > /dev/null || echo "this is a major release"
+this is a major release
 ```
 
 The same pair, as a PR comment:
@@ -144,12 +145,14 @@ OpenAPI must be JSON: convert YAML first, e.g. yq -o=json.
 
 ### `--contract auto` — pick the differ for you
 
-`auto` is the default and decides per file, from the name *and* the bytes:
+`auto` is the default and decides per file. **Content outranks the name:**
 
-- a name like `.env`, `.env.local` or `app.env`, **or** a body where every
-  meaningful line is `KEY=value` and there is no `{` anywhere → environment file
-- otherwise the document is parsed as JSON, and an `openapi`/`swagger`/`paths`
-  key means OpenAPI, anything else is a JSON Schema
+- if the bytes parse as JSON, the file is a document — an `openapi`/`swagger`/
+  `paths` key means OpenAPI, anything else is a JSON Schema. A schema called
+  `.env.a.json` is still a schema
+- only when JSON parsing fails does the name get a vote: `.env`, `.env.local`,
+  `app.env`, **or** a body where every meaningful line is `KEY=value` with no
+  `{` anywhere, is an environment file
 
 Both files must land in the same family. A dotenv sample compared against a JSON
 document, or an OpenAPI document against a JSON Schema, is an error (exit 2) that
@@ -200,6 +203,11 @@ $ apidiff --quiet demo/users-v1.json demo/users-v2.json
 breaking (major)
 ```
 
+`--quiet` overrides `--format json` and `--format markdown`, whatever order the
+flags appear in: one line on stdout, nothing else. The one exception is a
+failing run — an error still emits its `{"error": ...}` object so a caller
+piping stdout into a JSON parser never has to special-case failure.
+
 ### `--fail-on` — how strict the gate is
 
 ```console
@@ -222,7 +230,12 @@ written to stderr and exits `2`, which means `2>/dev/null` really is silent and
 $ apidiff demo/schema/user-v1.json 2>/dev/null
 $ echo $?
 2
+```
 
+And the machine-readable form of a failure, still on stdout when `--format json` is
+in effect:
+
+```console
 $ apidiff --format json nope.json nope2.json 2>/dev/null
 {"error":{"message":"cannot read nope.json"},"exitCode":2}
 ```
@@ -400,6 +413,15 @@ bump.
 `error: <path> is not valid UTF-8`. Decoding is strict on purpose: a file that
 only *almost* decodes would otherwise be compared with U+FFFD replacing the bad
 bytes, and a compare against corrupted text is worse than no compare at all.
+A leading UTF-8 BOM is rejected the same way, for the same reason — `ignoreBOM`
+is deliberate, so a BOM-prefixed document cannot parse as something slightly
+different from the bytes on disk. Strip it (`sed -i '1s/^\xEF\xBB\xBF//'`).
+
+**What if a document is simply too large?** Past 536870888 bytes (V8's ceiling
+on a single string) no text can exist at all, so the run fails with exit `2` and
+`error: <path> is too large to compare (<n> bytes; the text limit is <limit>)`
+— a size problem, not a corrupt file. Splitting the document, or comparing the
+sub-schemas with `diffSchemasAt`, is the way through.
 
 **What if the two files are different kinds?** That is an error, not a diff. A
 dotenv sample against a JSON document, or an OpenAPI document against a JSON
