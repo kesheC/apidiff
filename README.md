@@ -120,7 +120,7 @@ apidiff — semver verdict for API contract changes
 
 Usage:
   apidiff <old.json> <new.json> [options]
-  apidiff --contract env <old.env> <new.env>
+  apidiff <old.env> <new.env> [options]
 
 Options:
   --contract <auto|schema|openapi|env>  Document family to compare (default: auto)
@@ -136,18 +136,25 @@ Options:
 Exit codes:
   0  compatible, or nothing at or above --fail-on
   1  a change at or above --fail-on was found
-  2  the command itself failed (bad arguments, unreadable file, bad JSON)
+  2  the command itself failed (bad arguments, unreadable file, bad document)
 
-Both documents must be JSON (OpenAPI: convert YAML first, e.g. yq -o=json).
+Documents are JSON (Schema or OpenAPI) or .env samples; auto-detects which.
+OpenAPI must be JSON: convert YAML first, e.g. yq -o=json.
 ```
 
 ### `--contract auto` — pick the differ for you
 
-`auto` is the default and looks at the document shape: an `openapi` field means
-OpenAPI, a top-level `type`/`properties`/`$schema` means JSON Schema, a `.env`
-extension means environment file. Force one with `--contract` when a document is
-ambiguous (for instance a bare `{}`, which is a valid schema and a valid OpenAPI
-skeleton).
+`auto` is the default and decides per file, from the name *and* the bytes:
+
+- a name like `.env`, `.env.local` or `app.env`, **or** a body where every
+  meaningful line is `KEY=value` and there is no `{` anywhere → environment file
+- otherwise the document is parsed as JSON, and an `openapi`/`swagger`/`paths`
+  key means OpenAPI, anything else is a JSON Schema
+
+Both files must land in the same family. A dotenv sample compared against a JSON
+document, or an OpenAPI document against a JSON Schema, is an error (exit 2) that
+tells you to pass `--contract` — not a nonsense diff where one side "removed
+everything".
 
 ### `--format json` — for machine consumption
 
@@ -203,6 +210,27 @@ verdict: compatible (none)
 
 `--fail-on never` (or `--allow-breaking`) never exits `1`: useful while a
 breaking change is still being rolled out.
+
+### Errors go to stderr, and `--format json` stays JSON
+
+The verdict is data, so it owns stdout. Anything that makes the run fail (a bad
+flag, a missing file, a document that is neither JSON nor a dotenv sample) is
+written to stderr and exits `2`, which means `2>/dev/null` really is silent and
+`| jq` never sees prose:
+
+```console
+$ apidiff demo/schema/user-v1.json 2>/dev/null
+$ echo $?
+2
+
+$ apidiff --format json nope.json nope2.json 2>/dev/null
+{"error":{"message":"cannot read nope.json"},"exitCode":2}
+```
+
+When `--format json` is in effect the error is *also* printed to stdout as one
+JSON object, so a machine consumer can parse failures and successes the same way.
+The human sentence still goes to stderr — you get both, on the stream that suits
+each audience.
 
 ## Real-world demo / 真实演示
 
@@ -262,8 +290,15 @@ Rule table (severity is fixed per rule):
   ...
 ```
 
-56 rules today: **31 breaking, 23 changed, 2 deprecation**. Print the full table
+57 rules today: **31 breaking, 24 changed, 2 deprecation**. Print the full table
 with `apidiff --rules`.
+
+Severity is a property of the rule, not of the occurrence: `schema.bounds.narrowed`
+is breaking every time it fires, so a change can never be "breaking on Tuesdays".
+The one rule that is deliberately advisory is `schema.ref.broken` — a `$ref` that
+cannot be resolved (a missing sibling file, a typo'd anchor) is reported as
+`changed` with the offending ref in the message, because a compare that could not
+happen is not the same thing as an API that broke.
 
 Three severities, in ladder order:
 
@@ -306,23 +341,36 @@ new.json ─┘                          (schema |            (most severe
 ## Library API
 
 ```ts
-import { diffSchemas, diffOpenApi, diffEnv, verdictOf, formatText } from "apidiff";
+import { diffSchemas, verdictOf, formatText, shouldFail } from "apidiff";
 
-const findings = diffSchemas(oldSchema, newSchema);   // Finding[]
+const { findings } = diffSchemas(oldSchema, newSchema);  // { kind, findings }
 const verdict = verdictOf(findings);
 console.log(formatText(verdict));
-console.log(verdict.bump);        // "major" | "minor" | "none"
-console.log(verdict.verdict);     // "breaking" | "deprecation" | "changed" | null
+console.log(verdict.bump);     // "major" | "minor" | "none"
+console.log(verdict.verdict);  // "breaking" | "deprecation" | "changed" | null
+
+if (shouldFail(verdict, "breaking")) process.exitCode = 1;
 ```
 
-Every differ returns the same shape, so a caller can mix them:
+Every differ returns the same `{ kind, findings }` shape — `diffSchemas`,
+`diffOpenApi` and `diffEnv` — so one aggregation path works for all three:
 
 ```ts
-import { diffEnv, parseEnvKeys, shouldFail, severityRank } from "apidiff";
+import { diffEnv, diffOpenApi, diffSchemas, verdictOf } from "apidiff";
 
-const result = diffEnv(parseEnvKeys(oldEnvText), parseEnvKeys(newEnvText));
-if (shouldFail(result.findings, "breaking")) process.exitCode = 1;
+// diffEnv takes raw text (it parses KEY=value itself); the JSON differs take
+// already-parsed documents. Nothing here touches the filesystem.
+const differ =
+  family === "env"     ? () => diffEnv(oldText, newText) :
+  family === "openapi" ? () => diffOpenApi(oldDoc, newDoc) :
+                         () => diffSchemas(oldDoc, newDoc);
+
+const verdict = verdictOf(differ().findings);
 ```
+
+Library calls never read files, write output or call `process.exit`. Anything
+that needs to be fixed by the caller (a mixed family, an array root) throws
+`UsageError`, which the CLI turns into exit code 2.
 
 ## Zero runtime dependencies
 
@@ -347,6 +395,16 @@ permissive*, which sounds harmless, but a property that was guaranteed may now
 be absent. Callers that decode into a strict type or read the field
 unconditionally break on the missing value. Withdrawing a guarantee is a major
 bump.
+
+**What if a document is not valid UTF-8?** The run fails with exit `2` and
+`error: <path> is not valid UTF-8`. Decoding is strict on purpose: a file that
+only *almost* decodes would otherwise be compared with U+FFFD replacing the bad
+bytes, and a compare against corrupted text is worse than no compare at all.
+
+**What if the two files are different kinds?** That is an error, not a diff. A
+dotenv sample against a JSON document, or an OpenAPI document against a JSON
+Schema, exits `2` and tells you to pass `--contract`. Reporting "everything was
+removed" would be technically true and completely useless.
 
 **Does it care about `description`, `example` and other annotations?** No.
 Annotations do not change what a caller must send or can receive, so they are
