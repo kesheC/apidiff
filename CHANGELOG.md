@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CI runs every Node version the package claims to support.** The matrix was
+  Node 20 and 22; it is now 20, 22 and 24. The floor still matches `engines`,
+  and 24 is the current active LTS.
+- **CI now installs the packed tarball and runs the binary from it.** Tests
+  prove the source compiles; this proves the thing users download works.
+- GitHub Actions moved from `checkout@v4` / `setup-node@v4` to `v5`, which runs
+  on Node 24 and clears the Node 20 deprecation warning on every job.
+- The README install commands point at
+  `releases/latest/download/NAME.tgz` instead of a version-pinned URL, so the
+  documented command keeps working across releases. Each release now uploads a
+  stable-named copy next to the versioned tarball.
+
+### Fixed
+
+- **`npm run typecheck` failed on a clean checkout.** Two test files imported
+  `Severity` from `types.js`, which re-exports nothing, and built `Finding`
+  objects with untyped rule ids. They now import from `rules.js` and cast the
+  synthetic ids, so `tsc --noEmit` is clean over src and tests.
+
 ## [0.1.1] - 2026-10-31
 
 ### Fixed

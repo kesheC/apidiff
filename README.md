@@ -33,7 +33,7 @@ same inputs produce byte-identical output, so it can gate CI.
 unrelated package. Each release ships a tarball you can install directly:
 
 ```console
-$ npm install -g https://github.com/kesheC/apidiff/releases/download/v0.1.1/apidiff-0.1.1.tgz
+$ npm install -g https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
 $ apidiff --version
 0.1.1
 ```
@@ -41,7 +41,7 @@ $ apidiff --version
 As a project dev dependency / 装成项目依赖：
 
 ```console
-$ npm install -D https://github.com/kesheC/apidiff/releases/download/v0.1.1/apidiff-0.1.1.tgz
+$ npm install -D https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
 $ npx apidiff demo/schema/user-v1.json demo/schema/user-v2.json
 ```
 
