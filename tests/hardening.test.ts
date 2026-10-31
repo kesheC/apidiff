@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
-import { run } from "../src/cli.js";
+import { main, decodeUtf8, MAX_TEXT_BYTES, run } from "../src/cli.js";
 import { RULES } from "../src/rules.js";
 import { diffDetect } from "../src/index.js";
 import { diffSchemas } from "../src/schema-diff.js";
@@ -212,9 +212,160 @@ describe("P2-8 a non-schema root is refused", () => {
   });
 });
 
+/**
+ * M1: too big is not the same as corrupt.
+ *
+ * A 1 GB all-ASCII JSON used to fail inside the decoder and be reported as
+ * "is not valid UTF-8", sending the user to repair a file with nothing wrong
+ * with it. The decoder raises ERR_STRING_TOO_LONG; that now says so.
+ */
+describe("M1 an oversize document is named as oversize", () => {
+  it("reports the size, not the encoding, when V8 cannot hold the text", () => {
+    const tooBig = Buffer.alloc(MAX_TEXT_BYTES + 1, 0x41);
+    expect(() => decodeUtf8(tooBig, "huge.json")).toThrowError(/is too large to compare/);
+  });
+
+  it("names the byte count and the limit", () => {
+    const tooBig = Buffer.alloc(MAX_TEXT_BYTES + 1, 0x41);
+    expect(() => decodeUtf8(tooBig, "huge.json")).toThrowError(new RegExp(String(MAX_TEXT_BYTES)));
+  });
+
+  it("leaves a genuinely malformed file with the encoding message", () => {
+    const broken = Buffer.from([0x7b, 0xff, 0xfe, 0x7d]);
+    expect(() => decodeUtf8(broken, "bad.json")).toThrowError(/is not valid UTF-8/);
+    expect(() => decodeUtf8(broken, "bad.json")).not.toThrowError(/too large/);
+  });
+
+  it("decodes ordinary ASCII unchanged", () => {
+    expect(decodeUtf8(Buffer.from('{"a":1}', "utf8"), "ok.json")).toBe('{"a":1}');
+  });
+});
+
+/**
+ * M2: a crash must not masquerade as a breaking change.
+ *
+ * Exit 1 means "a change at or above --fail-on was found". A stack overflow
+ * used to escape main(), so the process died with exit 1 and zero bytes on
+ * stdout -- CI saw a breaking API change that never existed.
+ */
+describe("M2 a crash is reported as an error, not as a verdict", () => {
+  const nest = (depth: number, leaf: string): unknown => {
+    let schema: Record<string, unknown> = { type: leaf };
+    for (let index = 0; index < depth; index += 1) schema = { type: "object", properties: { a: schema } };
+    return schema;
+  };
+
+  it("exits 2 and explains the overflow at depth 1300", () => {
+    const deepOld = file(unique("deep-old.json"), nest(1300, "string"));
+    const deepNew = file(unique("deep-new.json"), nest(1300, "number"));
+    const out: string[] = [];
+    const err: string[] = [];
+    const spyOut = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      out.push(String(chunk));
+      return true;
+    });
+    const spyErr = vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+      err.push(String(chunk));
+      return true;
+    });
+    let code: number;
+    try {
+      code = main([deepOld, deepNew]);
+    } finally {
+      spyOut.mockRestore();
+      spyErr.mockRestore();
+    }
+    expect(code).toBe(2);
+    expect(err.join("")).toContain("internal error");
+    expect(out.join("")).toBe("");
+  });
+
+  it("still emits the JSON error object when --format json crashes", () => {
+    const deepOld = file(unique("deepj-old.json"), nest(1300, "string"));
+    const deepNew = file(unique("deepj-new.json"), nest(1300, "number"));
+    const out: string[] = [];
+    const spyOut = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      out.push(String(chunk));
+      return true;
+    });
+    const spyErr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    let code: number;
+    try {
+      code = main([deepOld, deepNew, "--format", "json"]);
+    } finally {
+      spyOut.mockRestore();
+      spyErr.mockRestore();
+    }
+    expect(code).toBe(2);
+    const parsed = JSON.parse(out.join("")) as { error: { message: string }; exitCode: number };
+    expect(parsed.exitCode).toBe(2);
+    expect(parsed.error.message).toContain("internal error");
+  });
+
+  it("still diffs a deeply nested but workable document", () => {
+    const okOld = file(unique("ok-deep-old.json"), nest(200, "string"));
+    const okNew = file(unique("ok-deep-new.json"), nest(200, "number"));
+    const result = cli(okOld, okNew);
+    expect([0, 1]).toContain(result.code);
+  });
+});
+
 describe("the new rule is part of the table", () => {
   it("registers schema.ref.broken as an advisory finding", () => {
     expect(RULES["schema.ref.broken"].severity).toBe("changed");
     expect(cli("--rules").out).toContain("schema.ref.broken");
+  });
+});
+
+/**
+ * B1: the file NAME must never outrank the file's CONTENT.
+ *
+ * The dotenv auto-detect added in e1f1864 asked `looksLikeEnvName` first, so
+ * a schema called `.env.a.json` was read as environment keys and reported as
+ * `dev` removed -- a major bump invented out of a filename. JSON that parses
+ * now wins unconditionally; a name only labels bytes the parser rejected.
+ */
+describe("B1 a .env prefix does not steal a JSON document", () => {
+  const oldSchema = { type: "object", properties: { PORT: { type: "string" } } };
+  const newSchema = { type: "object", properties: { PORT: { type: "number" } } };
+
+  it("diffs .env.a.json / .env.b.json as schemas", () => {
+    const result = cli(file(".env.a.json", oldSchema), file(".env.b.json", newSchema));
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("schema.type.narrowed");
+    expect(result.out).toContain("/properties/PORT");
+    expect(result.out).not.toContain("env.key.removed");
+  });
+
+  it("agrees with the same bytes under ordinary names", () => {
+    const plain = cli(file(unique("plain-old.json"), oldSchema), file(unique("plain-new.json"), newSchema));
+    const dotenv = cli(file(".env.a.json", oldSchema), file(".env.b.json", newSchema));
+    expect(dotenv.out).toBe(plain.out);
+    expect(dotenv.code).toBe(plain.code);
+  });
+
+  it("compares two byte-identical files when one name starts with .env", () => {
+    const body = { type: "object", properties: { A: { type: "string" } } };
+    const result = cli(file(".env.schema.json", body), file(unique("plain-schema.json"), body));
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("compatible");
+  });
+
+  it("still treats a real dotenv pair as environment keys", () => {
+    const result = cli(file(".env", "A=1\nB=2\n"), file(".env2", "A=1\n"));
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("env.key.removed");
+  });
+
+  it("still refuses a dotenv sample against a JSON document", () => {
+    const result = cli(file(unique("mix.env"), "A=1\n"), file(unique("mix.json"), oldSchema));
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("pass --contract");
+  });
+
+  it("still reports invalid JSON for a file that is neither", () => {
+    const result = cli(file(unique("junk.txt"), "not json at all"), file(unique("ok.json"), oldSchema));
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("invalid JSON");
   });
 });
