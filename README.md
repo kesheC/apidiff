@@ -29,13 +29,14 @@ same inputs produce byte-identical output, so it can gate CI.
 
 ## Install / 安装
 
-`apidiff` is **not published to the npm registry** — that name belongs to an
-unrelated package. Each release ships a tarball you can install directly:
+`apidiff` is **not published to the npm registry.** The name is still free; this
+project just has no publishing credentials yet. Each release ships a tarball you
+can install directly:
 
 ```console
 $ npm install -g https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
 $ apidiff --version
-0.1.5
+0.1.6
 ```
 
 Every release publishes the same tarball under a stable name (`apidiff.tgz`) alongside an
