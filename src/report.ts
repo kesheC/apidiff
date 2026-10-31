@@ -4,8 +4,16 @@ import { RULES, SEVERITY_LABEL, type RuleId, type Severity } from "./rules.js";
 /** Backtick, built at runtime so this file has no nested-quote hazards. */
 const TICK = String.fromCharCode(96);
 
+/**
+ * Where a finding happened, for humans.
+ *
+ * An empty JSON Pointer is RFC 6901 for the document root; printing it raw left
+ * a blank gap after the severity. The pointer itself stays "" (ids and JSON
+ * output depend on it), only this display label is substituted.
+ */
 function labelOf(finding: Finding): string {
-  return finding.location === undefined ? finding.pointer : finding.location;
+  const label = finding.location === undefined ? finding.pointer : finding.location;
+  return label === "" ? "/" : label;
 }
 
 /**
