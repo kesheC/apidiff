@@ -5,9 +5,9 @@
  * Everything interesting lives in the library; this file deliberately contains
  * no diff logic so it cannot drift from the exported API.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { diffDetect, diffEnv } from "./index.js";
 import { diffOpenApi } from "./openapi-diff.js";
@@ -240,8 +240,18 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   return run(argv, (line) => process.stdout.write(line + "\n"));
 }
 
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+// realpathSync on both sides: npm links the bin shim to this file, so
+// process.argv[1] is the symlink while import.meta.url is already the real
+// path. Comparing raw paths makes the CLI exit silently doing nothing.
+const invokedDirectly = (() => {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
 
 if (invokedDirectly) {
   process.exitCode = main();
