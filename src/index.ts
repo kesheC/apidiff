@@ -45,6 +45,9 @@ export {
 } from "./refs.js";
 export type { DerefResult, RefHop } from "./refs.js";
 
+export { UsageError } from "./errors.js";
+
+import { UsageError } from "./errors.js";
 import { diffEnv } from "./env-diff.js";
 import { diffOpenApi } from "./openapi-diff.js";
 import { diffSchemas } from "./schema-diff.js";
@@ -58,12 +61,29 @@ import type { Verdict } from "./types.js";
  * Detection is structural: an `openapi`/`swagger` key means OpenAPI. Callers
  * that already know should prefer the concrete function.
  */
-export function diffDetect(oldDocument: unknown, newDocument: unknown, options: DiffOptions = {}): { kind: ContractKind; findings: Finding[] } {
-  const looksLikeOpenApi = (document: unknown): boolean =>
+export function looksLikeOpenApi(document: unknown): boolean {
+  return (
     typeof document === "object" && document !== null && !Array.isArray(document) &&
-    ("openapi" in document || "swagger" in document || "paths" in document);
+    ("openapi" in document || "swagger" in document || "paths" in document)
+  );
+}
 
-  if (looksLikeOpenApi(oldDocument) || looksLikeOpenApi(newDocument)) {
+export function diffDetect(oldDocument: unknown, newDocument: unknown, options: DiffOptions = {}): { kind: ContractKind; findings: Finding[] } {
+  const oldOpenApi = looksLikeOpenApi(oldDocument);
+  const newOpenApi = looksLikeOpenApi(newDocument);
+
+  // Comparing an OpenAPI document against a JSON Schema used to fall through to
+  // the OpenAPI differ and report "everything was removed", which is technically
+  // true and completely useless. Say what actually happened instead.
+  if (oldOpenApi !== newOpenApi) {
+    const openApiSide = oldOpenApi ? "the old document" : "the new document";
+    const schemaSide = oldOpenApi ? "the new document" : "the old document";
+    throw new UsageError(
+      openApiSide + " is an OpenAPI document but " + schemaSide + " is a JSON Schema; pass --contract to say which family these files are",
+    );
+  }
+
+  if (oldOpenApi) {
     return { kind: "openapi", findings: diffOpenApi(oldDocument, newDocument, options).findings };
   }
   return { kind: "schema", findings: diffSchemas(oldDocument, newDocument, options).findings };
