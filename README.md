@@ -42,7 +42,7 @@ As a project dev dependency / 装成项目依赖：
 
 ```console
 $ npm install -D https://github.com/kesheC/apidiff/releases/download/v0.1.1/apidiff-0.1.1.tgz
-$ npx apidiff old.json new.json
+$ npx apidiff demo/schema/user-v1.json demo/schema/user-v2.json
 ```
 
 Or build it from a checkout / 或从源码编译：
@@ -61,8 +61,11 @@ Node.js >= 20.11. No runtime dependencies.
 
 ## Quick start / 60 秒上手
 
+The repo ships the fixtures every snippet below uses, so you can run them as
+written after `git clone`.
+
 ```console
-$ apidiff old.json new.json
+$ apidiff demo/schema/user-v1.json demo/schema/user-v2.json
 verdict: breaking (major)
 │   ├─ BREAKING     /properties/age/minimum
 │          minimum changed from 0 to 18  [schema.bounds.narrowed]
@@ -88,6 +91,12 @@ $ apidiff --format markdown demo/users-v1.json demo/users-v2.json
 | --- | --- | --- | --- |
 | BREAKING | DELETE /users/{id} | DELETE /users/{id} was removed; existing callers will get an error | `openapi.operation.removed` |
 | BREAKING | GET /users/{id} | GET /users/{id} parameter query "verbose" became required | `openapi.parameter.became-required` |
+| BREAKING | GET /users/{id} | properties.age.minimum: minimum changed from 0 to 18 | `schema.bounds.narrowed` |
+| BREAKING | GET /users/{id} | properties.role: enum member "member" is no longer accepted | `schema.enum.value.removed` |
+| BREAKING | GET /users/{id} | required: property "nickname" became required | `schema.required.added` |
+| BREAKING | GET /users/{id} | GET /users/{id} no longer documents response 404 | `openapi.response.removed` |
+| CHANGED | GET /users/{id} | GET /users/{id} operationId changed from getUser to fetchUser; generated clients will rename methods | `openapi.operationId.changed` |
+| CHANGED | GET /users/{id} | GET /users/{id} parameter query "fields" was added | `openapi.parameter.added-optional` |
 ```
 
 ## Usage / 用法
