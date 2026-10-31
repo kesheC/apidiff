@@ -38,6 +38,10 @@ export interface RuleDefinition {
 
 export const RULES = {
   // ---------------------------------------------------------------- JSON Schema
+  "schema.ref.broken": {
+    severity: "changed",
+    title: "A $ref could not be resolved and its target was not compared",
+  },
   "schema.replaced": {
     severity: "breaking",
     title: "Schema node replaced by an incompatible form (boolean schema or non-object)",

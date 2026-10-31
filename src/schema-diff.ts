@@ -41,9 +41,10 @@ class SchemaDiffer implements DiffContext {
     newRoot: unknown,
     private readonly basePointer: string,
     private readonly start: { old: unknown; new: unknown } = { old: oldRoot, new: newRoot },
+    loadDocument?: (specifier: string) => unknown,
   ) {
-    this.oldResolver = new RefResolver(oldRoot, { rootId: "<old>" });
-    this.newResolver = new RefResolver(newRoot, { rootId: "<new>" });
+    this.oldResolver = new RefResolver(oldRoot, { rootId: "<old>", ...(loadDocument === undefined ? {} : { loadDocument }) });
+    this.newResolver = new RefResolver(newRoot, { rootId: "<new>", ...(loadDocument === undefined ? {} : { loadDocument }) });
   }
 
   run(): Finding[] {
@@ -69,10 +70,30 @@ class SchemaDiffer implements DiffContext {
     const oldDeref = this.oldResolver.deref(oldNode);
     const newDeref = this.newResolver.deref(newNode);
 
-    // A cycle or a broken ref is not a difference; the surrounding rule already
-    // reported anything actionable. Stopping here is what makes cycles safe.
+    // A cycle is not a difference and must never become one: stopping here is
+    // what makes a self-referential `$ref` pair terminate.
     if (oldDeref.cyclic || newDeref.cyclic) return;
-    if (oldDeref.broken || newDeref.broken) return;
+
+    // A broken ref is different. Silently returning made a schema whose whole
+    // body is `{"$ref": "missing.json#/x"}` diff clean against itself, which
+    // reads as "compatible" when the truth is "this node was never compared".
+    if (oldDeref.broken || newDeref.broken) {
+      const broken = oldDeref.broken ? oldDeref : newDeref;
+      const intact = oldDeref.broken ? newDeref : oldDeref;
+      const failed = broken.hops[broken.hops.length - 1];
+      const ref = failed === undefined ? "" : failed.ref;
+      // Only worth reporting "via" when the other side did resolve: otherwise
+      // it is the same dangling ref twice.
+      const intactHop = intact.broken ? undefined : intact.hops[intact.hops.length - 1];
+      this.emit({
+        rule: "schema.ref.broken",
+        pointer,
+        message: "cannot follow $ref " + show(ref as JsonValue) + ", so this node was not compared",
+        before: ref,
+        ...(intactHop === undefined ? {} : { viaRef: intactHop.ref }),
+      });
+      return;
+    }
 
     const lastHop = newDeref.hops[newDeref.hops.length - 1];
     const viaRef = lastHop === undefined ? undefined : lastHop.ref;
@@ -127,7 +148,7 @@ class SchemaDiffer implements DiffContext {
  * Pure: no IO, no globals, no mutation of the inputs.
  */
 export function diffSchemas(oldSchema: unknown, newSchema: unknown, options: DiffOptions = {}): SchemaDiffResult {
-  const differ = new SchemaDiffer(options.oldRoot ?? oldSchema, options.newRoot ?? newSchema, "", { old: oldSchema, new: newSchema });
+  const differ = new SchemaDiffer(options.oldRoot ?? oldSchema, options.newRoot ?? newSchema, "", { old: oldSchema, new: newSchema }, options.loadDocument);
   return { kind: "schema", findings: differ.run() };
 }
 
@@ -141,9 +162,9 @@ export function diffSchemasAt(
   oldSchema: unknown,
   newSchema: unknown,
   pointer: string,
-  roots: { oldRoot?: unknown; newRoot?: unknown } = {},
+  roots: { oldRoot?: unknown; newRoot?: unknown; loadDocument?: (specifier: string) => unknown } = {},
 ): Finding[] {
-  const differ = new SchemaDiffer(roots.oldRoot ?? oldSchema, roots.newRoot ?? newSchema, "", { old: oldSchema, new: newSchema });
+  const differ = new SchemaDiffer(roots.oldRoot ?? oldSchema, roots.newRoot ?? newSchema, "", { old: oldSchema, new: newSchema }, roots.loadDocument);
   differ.compare(oldSchema, newSchema, pointer);
   return differ.findings;
 }
