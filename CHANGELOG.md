@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-11-01
+
+### Added
+
+- **The README is Chinese as well as English.** All twelve sections now carry a
+  Chinese paragraph under the English one -- same commands, same transcripts,
+  same limits. 2,073 CJK characters, up from 170.
+
+### Fixed
+
+- **The README no longer claims `diffSchemas` rejects an array root.** The
+  English FAQ said a call that needs fixing by the caller throws `UsageError`.
+  It does not: `diffSchemas([1, 2], { type: 'string' })` returns a single
+  `schema.replaced` finding. Only the CLI's `assertSchemaRoot()` refuses a root
+  that is not an object or a boolean, and only `diffDetect` throws for mixed
+  families. Both halves of the README now say that.
+- **The 0.1.8 notes now match what changed.** The "three guards" bullet claimed
+  guards v0.1.7 already had; only some were new. Version headings had no link
+  definitions, so `[0.1.7]` and `[0.1.8]` rendered as literal text, and
+  `[Unreleased]` still compared against v0.1.6.
+
+### Quality
+
+- 194 tests across 11 spec files, 2,422 lines of TypeScript.
+- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- Zero runtime dependencies.
+
 ## [0.1.8] - 2026-11-01
 
 ### Added
@@ -204,7 +231,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix: Ubuntu and Windows, Node 20 and 22.
 - Zero runtime dependencies.
 
-[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/kesheC/apidiff/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kesheC/apidiff/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kesheC/apidiff/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kesheC/apidiff/compare/v0.1.5...v0.1.6
