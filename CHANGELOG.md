@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-11-02
+
+### Changed
+
+- **Every README transcript now reproduces from a clean checkout.** A dash-named document was
+  shown as working before `--` existed as an option terminator, and the rule listing skipped from
+  the first rows to the last with a literal ellipsis that no command produces. Both are now real
+  runs: the leading-dash block shows the failure, the `cp`, and the retry that works; the rule
+  table is `--rules | head -8`, with the real line count stated separately.
+
+### Fixed
+
+- **The changelog described a CI matrix that no longer existed.** Every quality note from 0.1.2
+  onwards said "Node 20 and 22", but the matrix has run 20, 22 and 24 since that release — so each
+  of those sections, and the GitHub release notes generated from them, named a matrix the project
+  had already outgrown. The notes now list the versions CI actually runs.
+
+### Quality
+
+- 202 tests across 12 spec files, 2495 lines of TypeScript.
+- CI matrix: Ubuntu and Windows, Node 20, 22 and 24.
+- Zero runtime dependencies.
+
 ## [0.1.12] - 2026-11-02
 
 ### Fixed
@@ -22,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Quality
 
 - 202 tests across 12 spec files, 2495 lines of TypeScript.
-- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- CI matrix: Ubuntu and Windows, Node 20, 22 and 24.
 - Zero runtime dependencies.
 
 ## [0.1.11] - 2026-11-01
@@ -37,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Quality
 
 - 200 tests across 11 spec files, 2462 lines of TypeScript.
-- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- CI matrix: Ubuntu and Windows, Node 20, 22 and 24.
 - Zero runtime dependencies.
 
 ## [0.1.10] - 2026-11-01
@@ -58,7 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Quality
 
 - 198 tests across 11 spec files, 2,452 lines of TypeScript.
-- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- CI matrix: Ubuntu and Windows, Node 20, 22 and 24.
 - Zero runtime dependencies.
 
 ## [0.1.9] - 2026-11-01
@@ -85,7 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Quality
 
 - 194 tests across 11 spec files, 2,422 lines of TypeScript.
-- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- CI matrix: Ubuntu and Windows, Node 20, 22 and 24.
 - Zero runtime dependencies.
 
 ## [0.1.8] - 2026-11-01
@@ -287,7 +310,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [0.1.11]: https://github.com/kesheC/apidiff/compare/v0.1.10...v0.1.11
 [0.1.12]: https://github.com/kesheC/apidiff/compare/v0.1.11...v0.1.12
-[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.12...HEAD
+[0.1.13]: https://github.com/kesheC/apidiff/compare/v0.1.12...v0.1.13
+[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.13...HEAD
 [0.1.10]: https://github.com/kesheC/apidiff/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/kesheC/apidiff/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kesheC/apidiff/compare/v0.1.7...v0.1.8
