@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-01
+
+### Added
+
+- **The release gates are executed, not spell-checked.** `release.yml` and
+  `ci.yml` only ever run on a push, so nothing on a laptop exercised them.
+  `tests/workflow.test.ts` now cuts each guard's own shell body out of the YAML
+  and runs it -- the tag gate against matching, drifted, non-semver and
+  prerelease tags and ordered before the CHANGELOG lookup and before any `gh`
+  call; the package-contents assertion against a complete manifest, a stray
+  `.js.map`, an empty `dist/` and a leaked `src/`. 21 cases.
+- **Three guards the file did not have.** The release is re-published with
+  `gh release edit --draft=false` before any upload, the `apidiff` bin is smoke
+  tested, and `npm run build` clears `dist/` before compiling.
 ## [0.1.7] - 2026-11-01
 
 ### Fixed
