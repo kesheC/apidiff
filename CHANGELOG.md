@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-11-01
+
 ### Fixed
 
 - **`--` ends the options and starts the file paths.** Everything that starts
@@ -19,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   --format=json`, which is the spelling half the world types first. The value
   is split off before the switch; a boolean given a value (`--quiet=yes`) is a
   usage error instead of a silently ignored word.
+
+### Quality
+
+- 198 tests across 11 spec files, 2,452 lines of TypeScript.
+- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- Zero runtime dependencies.
 
 ## [0.1.9] - 2026-11-01
 
@@ -244,7 +252,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix: Ubuntu and Windows, Node 20 and 22.
 - Zero runtime dependencies.
 
-[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/kesheC/apidiff/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/kesheC/apidiff/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kesheC/apidiff/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kesheC/apidiff/compare/v0.1.6...v0.1.7
