@@ -71,6 +71,9 @@ const HELP = [
 ].join("\n");
 
 /** Parse argv. Throws UsageError for anything a user can fix. */
+/** The only flags that carry a value; "--flag=value" is legal for these. */
+const VALUE_FLAGS = new Set(["--format", "--fail-on", "--contract"]);
+
 export function parseArgs(argv: readonly string[]): CliOptions {
   const options: CliOptions = {
     oldPath: undefined,
@@ -96,7 +99,25 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       positional.push(...argv.slice(index + 1));
       break;
     }
-    switch (arg) {
+    // --flag=value is split off before the switch, so every case below keeps
+    // reading the flag name alone. Without it "--format=json" was reported as
+    // an unknown option, which is the spelling half the world types first.
+    let body = arg;
+    let inlineValue: string | undefined;
+    if (arg.startsWith("--")) {
+      const eq = arg.indexOf("=");
+      if (eq > 2) {
+        body = arg.slice(0, eq);
+        inlineValue = arg.slice(eq + 1);
+      }
+    }
+    // The booleans below would otherwise swallow "--quiet=yes" as a plain
+    // "--quiet" and never tell the user their value went nowhere.
+    if (inlineValue !== undefined && !VALUE_FLAGS.has(body)) {
+      throw new UsageError(body + " does not take a value (got " + JSON.stringify(inlineValue) + ")");
+    }
+
+    switch (body) {
       case "-h":
       case "--help":
         options.help = true;
@@ -119,7 +140,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
         options.allowBreaking = true;
         break;
       case "--format": {
-        const value = argv[(index += 1)];
+        const value = inlineValue ?? argv[(index += 1)];
         if (value !== "text" && value !== "json" && value !== "markdown") {
           throw new UsageError("--format expects text, json, or markdown (got " + String(value) + ")");
         }
@@ -127,7 +148,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
         break;
       }
       case "--fail-on": {
-        const value = argv[(index += 1)];
+        const value = inlineValue ?? argv[(index += 1)];
         if (value !== "breaking" && value !== "deprecation" && value !== "never") {
           throw new UsageError("--fail-on expects breaking, deprecation, or never (got " + String(value) + ")");
         }
@@ -135,7 +156,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
         break;
       }
       case "--contract": {
-        const value = argv[(index += 1)];
+        const value = inlineValue ?? argv[(index += 1)];
         if (value !== "auto" && value !== "schema" && value !== "openapi" && value !== "env") {
           throw new UsageError("--contract expects auto, schema, openapi, or env (got " + String(value) + ")");
         }
@@ -143,6 +164,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
         break;
       }
       default:
+        if (inlineValue !== undefined) throw new UsageError("unknown option " + body);
         if (arg.startsWith("-")) throw new UsageError("unknown option " + arg);
         positional.push(arg);
         break;

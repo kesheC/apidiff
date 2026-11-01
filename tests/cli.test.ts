@@ -82,6 +82,21 @@ describe("cli argument parsing", () => {
     expect(options.failOn).toBe("breaking");
   });
 
+  // --flag=value is the spelling half the world types first, and the parser
+  // answered "unknown option --format=json" for it.
+  it("accepts the --flag=value spelling for every value-taking flag", () => {
+    const options = parseArgs(["a", "b", "--contract=env", "--format=json", "--fail-on=never"]);
+    expect(options.contract).toBe("env");
+    expect(options.format).toBe("json");
+    expect(options.failOn).toBe("never");
+    expect(options.oldPath).toBe("a");
+    expect(options.newPath).toBe("b");
+  });
+
+  it("refuses a value on a flag that has none, even in the = spelling", () => {
+    expect(() => parseArgs(["--quiet=yes", "a", "b"])).toThrow(/--quiet does not take a value/);
+  });
+
   it("still reads flags that come before --", () => {
     const options = parseArgs(["--format", "json", "--", "-old.json", "new.json"]);
     expect(options.format).toBe("json");

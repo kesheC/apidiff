@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `-old.json` had no spelling that worked: `apidiff -- -old.json new.json`
   answered `unknown option --`. The two documents are the only positionals
   apidiff takes, and they are the reason to reach for the terminator.
+- **`--flag=value` is accepted for `--format`, `--fail-on` and `--contract`.**
+  `apidiff --format=json old.json new.json` answered `unknown option
+  --format=json`, which is the spelling half the world types first. The value
+  is split off before the switch; a boolean given a value (`--quiet=yes`) is a
+  usage error instead of a silently ignored word.
 
 ## [0.1.9] - 2026-11-01
 

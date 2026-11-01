@@ -121,6 +121,10 @@ major，`||` 右边就会打印 `this is a major release`；第三段是同一�
 
 ## Usage / 用法
 
+Options accept their value as the next word or after an equals sign, so
+`--format=json` and `--format json` are the same. `--` ends the options: everything
+after it is a file path.
+
 ```console
 $ apidiff --help
 apidiff — semver verdict for API contract changes
