@@ -450,8 +450,11 @@ const verdict = verdictOf(differ().findings);
 ```
 
 Library calls never read files, write output or call `process.exit`. Anything
-that needs to be fixed by the caller (a mixed family, an array root) throws
-`UsageError`, which the CLI turns into exit code 2.
+that needs to be fixed by the caller is a `UsageError`, which the CLI turns into
+exit code 2: `diffDetect` throws one when the two documents come from different
+families, and the CLI throws its own when a schema root is not an object or a
+boolean. `diffSchemas` itself does not reject an array root — it reports a
+single `schema.replaced` finding.
 
 中文对照：`diffSchemas` / `diffOpenApi` / `diffEnv` 三个 differ 返回同一种
 `{ kind, findings }` 结构，所以一套聚合逻辑通吃：`verdictOf(findings)` 得到 `verdict` 与
@@ -460,7 +463,7 @@ that needs to be fixed by the caller (a mixed family, an array root) throws
 库函数不碰文件系统、不写输出、不调 `process.exit`。需要调用方自己修正的问题会抛
 `UsageError`，由 CLI 统一转成退出码 2：两侧族别不同由库里的 `diffDetect` 抛出；根不是
 对象或布尔则由 CLI 入口的 `assertSchemaRoot` 拦下（库本身对数组根不抛错，只报一条
-`schema.replaced`）。
+`schema.replaced`）。英文段与这里说法一致，两边都不再声称数组根会抛 `UsageError`。
 
 ## Zero runtime dependencies
 
