@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-01
+
+### Fixed
+
+- **Nesting past 512 levels is a usage error, not a runtime accident.** The
+  depth at which the walker blew the call stack was a property of the host, not
+  of the document: a 1300-deep pair gave `breaking (major)` on node 20 and
+  `RangeError: Maximum call stack size exceeded` on node 24, so the same commit
+  failed three of six CI jobs and passed the other three. The walker now counts
+  depth itself and stops at `MAX_SCHEMA_DEPTH = 512` with a usage error that
+  names the fix (`diffSchemasAt`).
+- **Content outranks the filename in auto-detect.** A JSON Schema saved as
+  `.env.a.json` was compared as a dotenv sample and the verdict was fiction:
+  `environment variable {"type":"object"} is no longer read` instead of the
+  real `/properties/PORT` narrowing. Parsing now decides first; only when JSON
+  parsing fails does the name get a vote, and a side that is neither JSON nor
+  dotenv reports its parse error instead of being coerced into one family.
+- **An oversize document is named as oversize, not as bad UTF-8.**
+  `ERR_STRING_TOO_LONG` was reported as an encoding error; it now reads `is too
+  large to compare (n bytes; the text limit is 536870888)`.
+- **An unexpected crash exits 2, not 1.** `main()` now wraps `run()`, so a
+  crash is an error with one stderr line (plus the `{"error": ...}` object
+  under `--format json`) instead of exit 1, which means 'a breaking change was
+  found' to every caller.
+- **Errors go to stderr.** They were written to stdout, which made
+  `2>/dev/null` useless and fed prose to `jq`; a pipeline on stdout now sees
+  only verdicts, and `--format json` keeps a machine-readable object even when
+  a flag itself is bad.
+- **Invalid UTF-8 and a non-schema JSON root are loud.** Invalid bytes used to
+  be substituted with U+FFFD and compared as corrupted text, and an array root
+  produced a 'compatible' verdict.
+
+### Added
+
+- **dotenv samples are a first-class input.** The auto contract mode only ever
+  produced JSON, so two `.env` samples failed with a decoder message about the
+  wrong problem; a dotenv name (`.env`, `.env.local`, `app.env`) or a body of
+  only `KEY=value` lines is now recognised, and a mixed pair is an explicit
+  error.
+- **A broken `$ref` is reported as `schema.ref.broken`** instead of being
+  silently dropped.
+
+### Changed
+
+- **The tarball no longer ships unusable sourcemaps.** 15 `.js.map` files
+  pointed at `../src/*.ts` with no `sourcesContent` — 79119 map bytes against
+  89235 js bytes, ~90% dead weight. With `sourceMap`/`declarationMap` off in
+  `tsconfig.build.json`, the package is 48 entries / 50114 B / 218298 B
+  unpacked to 33 entries / 36660 B / 138639 B unpacked, and `--version`,
+  `--help` (byte-identical, same sha256) and a real diff are unchanged.
+- The document root is shown as `/` instead of a blank location.
+- `UsageError` lives in its own module.
+- The README documents the stream split, the 536870888-byte text ceiling, the
+  deliberate BOM rejection and the 57-rule table; every console block was
+  replayed against the built CLI, and two that did not match were corrected.
+
+### Security
+
+- The release job refuses to publish when the tag and `package.json` disagree
+  (before the first `gh` call, so a drifted tag reads as drift); CI parses
+  `npm pack --dry-run --json` before any `cd` to assert the dist entry points,
+  no `tests/`/`src/`/`node_modules/` prefixes and no `.js.map`, then imports the
+  installed package and asserts the public exports are functions.
+
+### Quality
+
+- 13 regression cases in `tests/hardening.test.ts` (B1, M1, M2), all of which
+  fail against the parent commit's `src/`: 9 files, 168 tests.
+
 ## [0.1.6] - 2026-11-01
 
 ### Fixed
