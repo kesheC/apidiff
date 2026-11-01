@@ -154,32 +154,47 @@ OpenAPI must be JSON: convert YAML first, e.g. yq -o=json.
 -- ends the options: everything after it is a file path, even -old.json.
 ```
 
+中文对照：上面就是 `--help` 的原样输出——每个选项的取值、三个退出码的含义，
+以及「文档要么是 JSON（Schema 或 OpenAPI），要么是 `.env` 样例，自动识别；OpenAPI
+必须是 JSON，YAML 先过 `yq -o=json`」这条前提，都写在这里。
+最后一行 `--` 是选项终止符：它之后的每一个词都是文件名，哪怕长得像选项。
+
 A lone `-` is a path, not an option, and apidiff does not read stdin — so it
 says so instead of complaining about a flag nobody wrote:
 
 ```console
 $ apidiff - -
 error: apidiff does not read stdin; pass the path of a document instead of "-"
+$ echo $?
+2
 ```
 
-中文对照：上面就是 `--help` 的原样输出——每个选项的取值、三个退出码的含义，
-以及「文档要么是 JSON（Schema 或 OpenAPI），要么是 `.env` 样例，自动识别；OpenAPI
-必须是 JSON，YAML 先过 `yq -o=json`」这条前提，都写在这里。
-最后一行 `--` 是选项终止符：它之后的每一个词都是文件名，哪怕长得像选项。
-文件名本身以短横线开头时（`-old.json`）就靠它，否则只会得到 `unknown option --`。
+单个 `-` 是路径，不是选项；apidiff 也不读 stdin，所以它把这一点直接说清楚，
+而不是抱怨一个没人写过的 flag，退出码是 2。
 
-单个 `-` 是路径，不是选项；apidiff 也不读 stdin，所以它直接说清楚，而不是抱怨一个没人写过的 flag：
+A filename that itself starts with a dash needs `--` in front of it. Without it
+the token is parsed as an option; with it the token is a path, and the compare
+actually runs:
 
 ```console
-$ apidiff - -
-error: apidiff does not read stdin; pass the path of a document instead of "-"
+$ apidiff -old.json demo/schema/user-v2.json
+error: unknown option -old.json
+run apidiff --help for usage
+$ cp demo/schema/user-v1.json ./-old.json
+$ apidiff -- -old.json demo/schema/user-v2.json
+verdict: breaking (major)
+│   ├─ BREAKING     /properties/age/minimum
+│          minimum changed from 0 to 18  [schema.bounds.narrowed]
+│   └─ BREAKING     /required
+│          property "age" became required  [schema.required.added]
+│
+│ 2 breaking -> bump major
+$ rm ./-old.json
 ```
 
-```console
-$ apidiff -- -old.json new.json
-verdict: compatible (none)
-│ no contract differences found
-```
+中文对照：文件名自己以短横线开头时（`-old.json`）必须先写 `--`。不写，这个词被当成
+选项，得到 `unknown option -old.json`；写了，它就是一个路径，比较照常跑完（上面用
+`cp` 现造出那个文件名，`user-v1` 对 `user-v2` 因此判定 `major`，最后删掉）。
 
 ### `--contract auto` — pick the differ for you
 
@@ -364,8 +379,11 @@ query 参数两条 `CHANGED`，最终 `6 breaking, 2 changed -> bump major`。�
 
 ## The rule table / 规则表
 
+The listing is 59 lines — a header, a blank line, and one line per rule — so the
+excerpt below takes the first eight with `head`; drop the pipe for all of them:
+
 ```console
-$ apidiff --rules
+$ apidiff --rules | head -8
 Rule table (severity is fixed per rule):
 
   CHANGED     env.key.added                           A new environment variable was added
@@ -374,11 +392,12 @@ Rule table (severity is fixed per rule):
   BREAKING    openapi.mediaType.removed               A media type is no longer accepted or returned
   CHANGED     openapi.operation.added                 A new operation was added
   DEPRECATION openapi.operation.deprecated            An operation was marked deprecated
-  ...
 ```
 
-57 rules today: **31 breaking, 24 changed, 2 deprecation**. Print the full table
-with `apidiff --rules`.
+57 rules today: **31 breaking, 24 changed, 2 deprecation** — the three numbers add
+up to the rule count, which is the check our CI runs: it counts the printed rows
+(minus the header and the blank line) and compares them with
+`Object.keys(RULES).length`.
 
 Severity is a property of the rule, not of the occurrence: `schema.bounds.narrowed`
 is breaking every time it fires, so a change can never be "breaking on Tuesdays".
@@ -399,8 +418,10 @@ Three severities, in ladder order:
 The bump is derived, not guessed: `verdictOf` takes the most severe finding.
 There are no ties to break, because the ladder is total.
 
-中文对照：上面是 `--rules` 的截断输出（完整表用 `apidiff --rules` 自己打印）。
-当前共 **57 条规则：31 breaking、24 changed、2 deprecation**。严重度是规则自身的属性，
+中文对照：`--rules` 一共打 59 行——一行表头、一个空行、每条规则一行——所以上面用
+`head -8` 只取前八行，去掉管道就是全表。当前共 **57 条规则：31 breaking、24 changed、
+2 deprecation**，三个数字加起来就是规则总数，这也是 CI 在做的事：数打印出来的行
+（减去表头和空行），再和 `Object.keys(RULES).length` 对账。严重度是规则自身的属性，
 不是单次命中的属性——`schema.bounds.narrowed` 每次都是 breaking，不会「周二变温和」。
 唯一一条刻意降级为提示的规则是 `schema.ref.broken`：解析不到的 `$ref`（缺文件、
 锚点拼错）以 `changed` 报出并把那个 ref 写进消息，因为「没能比成」不等于「接口挂了」。
