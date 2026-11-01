@@ -36,7 +36,7 @@ can install directly:
 ```console
 $ npm install -g https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
 $ apidiff --version
-0.1.10
+0.1.11
 ```
 
 Every release publishes the same tarball under a stable name (`apidiff.tgz`) alongside an
