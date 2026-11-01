@@ -99,6 +99,10 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       positional.push(...argv.slice(index + 1));
       break;
     }
+    // A lone "-" is the conventional stdin placeholder, not an option. It was
+    // answered with "unknown option -", which is not even true: "-" is a path.
+    // (apidiff reads files from disk, so it is still refused below -- but as a
+    // path that does not exist, which is what it is.)
     // --flag=value is split off before the switch, so every case below keeps
     // reading the flag name alone. Without it "--format=json" was reported as
     // an unknown option, which is the spelling half the world types first.
@@ -165,7 +169,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       }
       default:
         if (inlineValue !== undefined) throw new UsageError("unknown option " + body);
-        if (arg.startsWith("-")) throw new UsageError("unknown option " + arg);
+        if (arg.startsWith("-") && arg !== "-") throw new UsageError("unknown option " + arg);
         positional.push(arg);
         break;
     }
@@ -186,6 +190,12 @@ export function parseArgs(argv: readonly string[]): CliOptions {
  * with `fatal: true` makes that a loud error instead.
  */
 function readSource(path: string): string {
+  // "-" is conventionally stdin. apidiff compares two documents and never read
+  // stdin, so saying "cannot read -" leaves the reader guessing whether a pipe
+  // was expected to work.
+  if (path === "-") {
+    throw new UsageError("apidiff does not read stdin; pass the path of a document instead of \"-\"");
+  }
   let bytes: Buffer;
   try {
     bytes = readFileSync(path);

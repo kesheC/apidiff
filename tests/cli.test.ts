@@ -97,6 +97,17 @@ describe("cli argument parsing", () => {
     expect(() => parseArgs(["--quiet=yes", "a", "b"])).toThrow(/--quiet does not take a value/);
   });
 
+  // Regression: a lone "-" is the conventional stdin placeholder, and the
+  // parser answered "unknown option -" -- a message that is not even true,
+  // since "-" is a path. It is a path here now, and the reader is told plainly
+  // that apidiff does not read stdin.
+  it("reads a lone dash as a path, not as an option", () => {
+    const options = parseArgs(["-", "b.json"]);
+    expect(options.oldPath).toBe("-");
+    expect(options.newPath).toBe("b.json");
+    expect(() => parseArgs(["--bogus"])).toThrow(/unknown option --bogus/);
+  });
+
   it("still reads flags that come before --", () => {
     const options = parseArgs(["--format", "json", "--", "-old.json", "new.json"]);
     expect(options.format).toBe("json");
@@ -149,6 +160,14 @@ describe("cli behaviour", () => {
     expect(result.code).toBe(2);
     expectSilentStdout(result);
     expect(result.err).toContain("cannot read");
+  });
+
+  it("says plainly that stdin is not read, instead of calling - a bad option", () => {
+    const result = cli("-", "-");
+    expect(result.code).toBe(2);
+    expectSilentStdout(result);
+    expect(result.err).toContain("apidiff does not read stdin");
+    expect(result.err).not.toContain("unknown option");
   });
 
   it("exits 2 for invalid JSON", () => {

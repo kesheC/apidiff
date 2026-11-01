@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A lone `-` is a path, not a bad option.** The stdin placeholder was answered
+  with `unknown option -`, which is not even true -- `-` is a path. It parses as
+  one now, and reading it says what actually happened: `apidiff does not read
+  stdin; pass the path of a document instead of "-"`.
+
 ## [0.1.10] - 2026-11-01
 
 ### Fixed
