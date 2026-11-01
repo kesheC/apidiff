@@ -72,6 +72,22 @@ describe("cli argument parsing", () => {
     expect(() => parseArgs(["--contract", "text"])).toThrow(/--contract expects/);
   });
 
+  // Regression: a document whose name starts with a dash had no spelling at
+  // all, because every leading-dash argument was read as an option. Everything
+  // after "--" is a path now.
+  it("takes everything after -- as a document path", () => {
+    const options = parseArgs(["--", "-old.json", "new.json"]);
+    expect(options.oldPath).toBe("-old.json");
+    expect(options.newPath).toBe("new.json");
+    expect(options.failOn).toBe("breaking");
+  });
+
+  it("still reads flags that come before --", () => {
+    const options = parseArgs(["--format", "json", "--", "-old.json", "new.json"]);
+    expect(options.format).toBe("json");
+    expect(options.oldPath).toBe("-old.json");
+  });
+
   it("rejects three positional documents", () => {
     expect(() => parseArgs(["a", "b", "c"])).toThrow(/expected two files, got 3/);
   });

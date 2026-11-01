@@ -67,6 +67,7 @@ const HELP = [
   "",
   "Documents are JSON (Schema or OpenAPI) or .env samples; auto-detects which.",
   "OpenAPI must be JSON: convert YAML first, e.g. yq -o=json.",
+  "-- ends the options: everything after it is a file path, even -old.json.",
 ].join("\n");
 
 /** Parse argv. Throws UsageError for anything a user can fix. */
@@ -88,6 +89,13 @@ export function parseArgs(argv: readonly string[]): CliOptions {
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
+    // Everything after -- is a file path, even when it starts with a dash.
+    // Without this there was no way to name a document called "-old.json":
+    // the parser answered "unknown option --".
+    if (arg === "--") {
+      positional.push(...argv.slice(index + 1));
+      break;
+    }
     switch (arg) {
       case "-h":
       case "--help":

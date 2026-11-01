@@ -147,11 +147,20 @@ Exit codes:
 
 Documents are JSON (Schema or OpenAPI) or .env samples; auto-detects which.
 OpenAPI must be JSON: convert YAML first, e.g. yq -o=json.
+-- ends the options: everything after it is a file path, even -old.json.
 ```
 
 中文对照：上面就是 `--help` 的原样输出——每个选项的取值、三个退出码的含义，
 以及「文档要么是 JSON（Schema 或 OpenAPI），要么是 `.env` 样例，自动识别；OpenAPI
 必须是 JSON，YAML 先过 `yq -o=json`」这条前提，都写在这里。
+最后一行 `--` 是选项终止符：它之后的每一个词都是文件名，哪怕长得像选项。
+文件名本身以短横线开头时（`-old.json`）就靠它，否则只会得到 `unknown option --`。
+
+```console
+$ apidiff -- -old.json new.json
+verdict: compatible (none)
+│ no contract differences found
+```
 
 ### `--contract auto` — pick the differ for you
 

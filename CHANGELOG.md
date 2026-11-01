@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--` ends the options and starts the file paths.** Everything that starts
+  with a dash was read as an option, so a document actually named
+  `-old.json` had no spelling that worked: `apidiff -- -old.json new.json`
+  answered `unknown option --`. The two documents are the only positionals
+  apidiff takes, and they are the reason to reach for the terminator.
+
 ## [0.1.9] - 2026-11-01
 
 ### Added
