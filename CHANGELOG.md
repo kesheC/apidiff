@@ -18,9 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prerelease tags and ordered before the CHANGELOG lookup and before any `gh`
   call; the package-contents assertion against a complete manifest, a stray
   `.js.map`, an empty `dist/` and a leaked `src/`. 21 cases.
-- **Three guards the file did not have.** The release is re-published with
-  `gh release edit --draft=false` before any upload, the `apidiff` bin is smoke
-  tested, and `npm run build` clears `dist/` before compiling.
+- **`npm run build` now clears `dist/` first, and the bin is smoke tested.**
+  `clean` did not exist at v0.1.7, so any file tsc no longer emits survived in
+  `dist/` from an earlier build and `npm pack` shipped it; and nothing until now
+  ran the `apidiff` bin from the installed package rather than from the checkout.
+
 ## [0.1.7] - 2026-11-01
 
 ### Fixed
@@ -202,7 +204,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix: Ubuntu and Windows, Node 20 and 22.
 - Zero runtime dependencies.
 
-[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/kesheC/apidiff/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/kesheC/apidiff/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/kesheC/apidiff/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kesheC/apidiff/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/kesheC/apidiff/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/kesheC/apidiff/compare/v0.1.3...v0.1.4
