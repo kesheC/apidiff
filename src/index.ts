@@ -21,7 +21,7 @@ export type {
 export { RULES, SEVERITY_LABEL, SEVERITY_LADDER, severityRank } from "./rules.js";
 export type { RuleDefinition, RuleId, Severity } from "./rules.js";
 
-export { diffSchemas, diffSchemasAt } from "./schema-diff.js";
+export { diffSchemas, diffSchemasAt, MAX_SCHEMA_DEPTH } from "./schema-diff.js";
 export { diffOpenApi, HTTP_METHODS, operationLabel } from "./openapi-diff.js";
 export { diffEnv, parseEnvKeys } from "./env-diff.js";
 

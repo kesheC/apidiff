@@ -1,9 +1,32 @@
 import type { DiffOptions, Finding, JsonValue, SchemaDiffResult } from "./types.js";
+import { UsageError } from "./errors.js";
 import { RULES } from "./rules.js";
 import { RefResolver, isJsonObject } from "./refs.js";
 import { compareScalarRules } from "./schema-scalars.js";
 import { compareStructureRules } from "./schema-structure.js";
 import { show, type DiffContext, type Emit } from "./schema-util.js";
+
+/**
+ * How many levels of nesting the walker will follow before refusing.
+ *
+ * The walk is recursive, so its real ceiling is the host's call stack — which
+ * differs per node build and per machine. The same 1300-deep document produced
+ * a verdict on node 20 and `RangeError: Maximum call stack size exceeded` on
+ * node 24, so "does this schema diff?" had no stable answer, and six CI jobs
+ * disagreed about the same commit. 512 is far past anything a hand-written or
+ * generated API contract reaches and comfortably below the smallest stack we
+ * ship on; past it the run stops with a message that names the fix instead of
+ * dying inside the engine.
+ */
+export const MAX_SCHEMA_DEPTH = 512;
+
+/** Keep a refused pointer readable in a one-line error message. */
+function shortenPointer(pointer: string): string {
+  const MAX = 200;
+  if (pointer.length <= MAX) return pointer;
+  // The tail carries the nesting; the head only says "this is a deep schema".
+  return pointer.slice(0, 40) + " ... " + pointer.slice(pointer.length - (MAX - 45));
+}
 
 /**
  * Walks two schema trees in lockstep.
@@ -66,7 +89,38 @@ class SchemaDiffer implements DiffContext {
     });
   }
 
+  /**
+   * Depth of the walk below the root, and the guard that keeps it finite.
+   *
+   * Recursion here is bounded by the document, not by us, so a document nested
+   * deeper than the host's call stack aborts with `RangeError: Maximum call
+   * stack size exceeded`. That ceiling belongs to the runtime, not to the file:
+   * the same 1300-deep schema got a verdict on node 20 and a RangeError on
+   * node 24. The catch-all in main() already turns that into exit 2, but the
+   * answer still depended on which node was installed. Counting depth turns a
+   * runtime-dependent crash into a stable refusal that names the fix.
+   */
+  private depth = 0;
+
   compare(oldNode: unknown, newNode: unknown, pointer: string): void {
+    if (this.depth >= MAX_SCHEMA_DEPTH) {
+      throw new UsageError(
+        "schemas nest more than " +
+          String(MAX_SCHEMA_DEPTH) +
+          " levels deep (stopped at " +
+          shortenPointer(pointer) +
+          "); compare the two sub-schemas with diffSchemasAt instead",
+      );
+    }
+    this.depth += 1;
+    try {
+      this.compareNode(oldNode, newNode, pointer);
+    } finally {
+      this.depth -= 1;
+    }
+  }
+
+  private compareNode(oldNode: unknown, newNode: unknown, pointer: string): void {
     const oldDeref = this.oldResolver.deref(oldNode);
     const newDeref = this.newResolver.deref(newNode);
 

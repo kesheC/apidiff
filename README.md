@@ -423,6 +423,15 @@ on a single string) no text can exist at all, so the run fails with exit `2` and
 — a size problem, not a corrupt file. Splitting the document, or comparing the
 sub-schemas with `diffSchemasAt`, is the way through.
 
+**What if a document is nested absurdly deep?** The walk stops at 512 levels
+with exit `2` and
+`error: schemas nest more than 512 levels deep (stopped at <pointer>)`.
+The limit is not arbitrary: the walker is recursive, so without it the ceiling
+was whatever the runtime's call stack happened to be, and the same file got a
+verdict on one Node version and a stack overflow on another — exit 1 either way,
+which this tool reserves for "a breaking change was found". Compare the two
+sub-schemas with `diffSchemasAt`, or flatten the nesting, to go past it.
+
 **What if the two files are different kinds?** That is an error, not a diff. A
 dotenv sample against a JSON document, or an OpenAPI document against a JSON
 Schema, exits `2` and tells you to pass `--contract`. Reporting "everything was

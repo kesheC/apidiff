@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { main, decodeUtf8, MAX_TEXT_BYTES, run } from "../src/cli.js";
 import { RULES } from "../src/rules.js";
 import { diffDetect } from "../src/index.js";
-import { diffSchemas } from "../src/schema-diff.js";
+import { MAX_SCHEMA_DEPTH, diffSchemas } from "../src/schema-diff.js";
 
 /**
  * Regressions for defects found by reviewing the shipped CLI as a black box.
@@ -247,17 +247,27 @@ describe("M1 an oversize document is named as oversize", () => {
  * Exit 1 means "a change at or above --fail-on was found". A stack overflow
  * used to escape main(), so the process died with exit 1 and zero bytes on
  * stdout -- CI saw a breaking API change that never existed.
+ *
+ * The engine now counts depth itself instead of waiting for the host to run out
+ * of stack. That is what these cases pin: the refusal has to be the same on
+ * every runtime, because the old ones were not. A 1300-deep pair produced
+ * "breaking (major)" on node 20 and a RangeError on node 24, and CI -- which
+ * runs both -- failed the same commit on three of its six jobs.
  */
 describe("M2 a crash is reported as an error, not as a verdict", () => {
-  const nest = (depth: number, leaf: string): unknown => {
-    let schema: Record<string, unknown> = { type: leaf };
-    for (let index = 0; index < depth; index += 1) schema = { type: "object", properties: { a: schema } };
-    return schema;
+  /**
+   * Build a schema nested `depth` levels, as TEXT.
+   *
+   * Text on purpose: JSON.stringify on the equivalent object recurses too, so
+   * a fixture built that way dies of the very stack overflow under test.
+   */
+  const deepSchemaText = (depth: number, leaf: string): string => {
+    const open = '{"type":"object","properties":{"a":'.repeat(depth);
+    const close = "}}".repeat(depth);
+    return open + '{"type":"' + leaf + '"}' + close;
   };
 
-  it("exits 2 and explains the overflow at depth 1300", () => {
-    const deepOld = file(unique("deep-old.json"), nest(1300, "string"));
-    const deepNew = file(unique("deep-new.json"), nest(1300, "number"));
+  const runMain = (argv: readonly string[]): { code: number; out: string; err: string } => {
     const out: string[] = [];
     const err: string[] = [];
     const spyOut = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
@@ -270,41 +280,44 @@ describe("M2 a crash is reported as an error, not as a verdict", () => {
     });
     let code: number;
     try {
-      code = main([deepOld, deepNew]);
+      code = main([...argv]);
     } finally {
       spyOut.mockRestore();
       spyErr.mockRestore();
     }
-    expect(code).toBe(2);
-    expect(err.join("")).toContain("internal error");
-    expect(out.join("")).toBe("");
+    return { code, out: out.join(""), err: err.join("") };
+  };
+
+  it("refuses nesting past the documented limit instead of overflowing", () => {
+    const deepOld = file(unique("deep-old.json"), deepSchemaText(MAX_SCHEMA_DEPTH + 50, "string"));
+    const deepNew = file(unique("deep-new.json"), deepSchemaText(MAX_SCHEMA_DEPTH + 50, "number"));
+    const result = runMain([deepOld, deepNew]);
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("nest more than " + String(MAX_SCHEMA_DEPTH));
+    expect(result.err).toContain("diffSchemasAt");
+    expect(result.out).toBe("");
   });
 
-  it("still emits the JSON error object when --format json crashes", () => {
-    const deepOld = file(unique("deepj-old.json"), nest(1300, "string"));
-    const deepNew = file(unique("deepj-new.json"), nest(1300, "number"));
-    const out: string[] = [];
-    const spyOut = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
-      out.push(String(chunk));
-      return true;
-    });
-    const spyErr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    let code: number;
-    try {
-      code = main([deepOld, deepNew, "--format", "json"]);
-    } finally {
-      spyOut.mockRestore();
-      spyErr.mockRestore();
-    }
-    expect(code).toBe(2);
-    const parsed = JSON.parse(out.join("")) as { error: { message: string }; exitCode: number };
+  it("still emits the JSON error object when the document is too deep", () => {
+    const deepOld = file(unique("deepj-old.json"), deepSchemaText(MAX_SCHEMA_DEPTH + 50, "string"));
+    const deepNew = file(unique("deepj-new.json"), deepSchemaText(MAX_SCHEMA_DEPTH + 50, "number"));
+    const result = runMain([deepOld, deepNew, "--format", "json"]);
+    expect(result.code).toBe(2);
+    const parsed = JSON.parse(result.out) as { error: { message: string }; exitCode: number };
     expect(parsed.exitCode).toBe(2);
-    expect(parsed.error.message).toContain("internal error");
+    expect(parsed.error.message).toContain("nest more than " + String(MAX_SCHEMA_DEPTH));
   });
 
-  it("still diffs a deeply nested but workable document", () => {
-    const okOld = file(unique("ok-deep-old.json"), nest(200, "string"));
-    const okNew = file(unique("ok-deep-new.json"), nest(200, "number"));
+  it("diffs a deeply nested but workable document", () => {
+    const okOld = file(unique("ok-deep-old.json"), deepSchemaText(200, "string"));
+    const okNew = file(unique("ok-deep-new.json"), deepSchemaText(200, "number"));
+    const result = cli(okOld, okNew);
+    expect([0, 1]).toContain(result.code);
+  });
+
+  it("keeps the limit itself workable, so the boundary is not off by one", () => {
+    const okOld = file(unique("edge-deep-old.json"), deepSchemaText(MAX_SCHEMA_DEPTH - 2, "string"));
+    const okNew = file(unique("edge-deep-new.json"), deepSchemaText(MAX_SCHEMA_DEPTH - 2, "number"));
     const result = cli(okOld, okNew);
     expect([0, 1]).toContain(result.code);
   });
