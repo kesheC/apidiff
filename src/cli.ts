@@ -19,6 +19,7 @@ import { diffSchemas } from "./schema-diff.js";
 import type { Finding } from "./types.js";
 import { verdictOf, type FailOn } from "./verdict.js";
 import { getVersion } from "./version.js";
+import { installPipeGuard } from "./pipe.js";
 
 type Format = "text" | "json" | "markdown";
 
@@ -504,6 +505,8 @@ const invokedDirectly = (() => {
     return false;
   }
 })();
+
+installPipeGuard();
 
 if (invokedDirectly) {
   process.exitCode = main();
