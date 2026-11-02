@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   would stay green through all of it. `tests/readme.test.ts` derives each block with the library
   calls the CLI itself uses — `diff`, `diffEnv`, `verdictOf`, `formatText`, `formatJson`,
   `formatMarkdown`, `formatRules` — and asserts the README contains the rendered text verbatim.
+- **The contributing guide implied CI re-ran every transcript the README quotes.** The CI step
+  greps one verdict line and one rule id out of the OpenAPI demo and derives the rule count; it
+  does not re-derive the text report, the JSON body, the markdown table or the `.env` verdict.
+  Those are covered by `tests/readme.test.ts` instead, and the guide now draws the line between
+  the two.
 
 ## [0.1.14] - 2026-11-02
 

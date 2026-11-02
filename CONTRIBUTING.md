@@ -39,9 +39,13 @@ npm run build       # tsc -p tsconfig.build.json
 npm test            # vitest run
 ```
 
-Opening the pull request runs them on Ubuntu and Windows across Node 20, 22 and 24. If a change
-touches a transcript the README quotes, CI re-runs that transcript too and fails when the quoted
-output no longer matches.
+Opening the pull request runs them on Ubuntu and Windows across Node 20, 22 and 24.
+
+Two layers keep the README honest. `tests/readme.test.ts` re-derives the reports the demo pairs
+produce — text, JSON, markdown, the env verdict, the rule-table excerpt — through the same library
+calls the CLI uses, and `tests/package.test.ts` pins the documented rule counts to `RULES`. The CI
+step `README demo transcripts still reproduce` then re-runs the OpenAPI demo and the rule-count
+check against the built CLI. Transcripts of the error paths and exit codes are checked by hand.
 
 ## House rules
 
