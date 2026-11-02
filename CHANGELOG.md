@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now derives all four numbers from `RULES` and asserts both paragraphs quote them, so moving a
   rule from `changed` to `breaking` fails with `expected 30 to be 31` instead of silently
   underselling the severity.
+- **The README quoted seven reports nothing compared against the demo files.** The text report,
+  the `--format json` body, the markdown table, the `.env` comparison, the first eight rows of the
+  rule table and the no-differences case are all transcripts of runs against `demo/`, and that
+  directory is committed — so a new rule, a nudged `minimum` or a formatting touch rewrites three
+  blocks at once. The CI step only greps for `verdict: breaking (major)` and one rule id, which
+  would stay green through all of it. `tests/readme.test.ts` derives each block with the library
+  calls the CLI itself uses — `diff`, `diffEnv`, `verdictOf`, `formatText`, `formatJson`,
+  `formatMarkdown`, `formatRules` — and asserts the README contains the rendered text verbatim.
 
 ## [0.1.14] - 2026-11-02
 
