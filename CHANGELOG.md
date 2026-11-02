@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The README's severity split had nothing watching it.** CI compares the rows `--rules` prints
+  with `Object.keys(RULES).length`, so a rule added without a README edit fails there — but the
+  sentence a reader actually uses to decide whether this tool is strict enough quotes three
+  numbers, one per severity, and the Chinese mirror quotes them again. `tests/package.test.ts`
+  now derives all four numbers from `RULES` and asserts both paragraphs quote them, so moving a
+  rule from `changed` to `breaking` fails with `expected 30 to be 31` instead of silently
+  underselling the severity.
+
 ## [0.1.14] - 2026-11-02
 
 ### Added
