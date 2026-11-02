@@ -53,9 +53,22 @@ On macOS use `shasum -a 256 -c apidiff.tgz.sha256` — there is no `sha256sum` b
 
 As a project dev dependency / 装成项目依赖：
 
+The two schemas are written inline, so this runs in any project — no checkout needed:
+
 ```console
 $ npm install -D https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
-$ npx apidiff demo/schema/user-v1.json demo/schema/user-v2.json
+$ printf '{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}\n' > before.json
+$ printf '{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name","age"]}\n' > after.json
+$ npx apidiff before.json after.json
+verdict: breaking (major)
+│   ├─ BREAKING     /required
+│          property "age" is required  [schema.required.added]
+│   └─ CHANGED      /properties/age
+│          property "age" was added and is required  [schema.property.added]
+│
+│ 1 breaking, 1 changed -> bump major
+$ echo $?
+1
 ```
 
 Or build it from a checkout / 或从源码编译：
