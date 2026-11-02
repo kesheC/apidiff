@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The README finally shows the GitHub Action it has been recommending.** The Usage section told
+  readers to gate CI on the exit code and then left them to reverse-engineer the wiring, and the
+  wiring has two traps a careful reader still walks into: `actions/checkout` maps a single branch,
+  so `git fetch origin main` fills `FETCH_HEAD` and leaves `origin/main` undefined for `git show`,
+  and a contract file that is new on the branch makes `git show` write an empty baseline that
+  apidiff reads as `error: invalid JSON` (exit `2`) instead of "nothing to compare yet". The new
+  `### As a GitHub Action` section quotes the whole step, an explicit
+  `+refs/heads/main:refs/remotes/origin/main` refspec and all, and `tests/action.test.ts` builds a
+  real repository with a real `origin`, checks out one branch the way a runner does, and runs the
+  quoted body under `bash -e` — breaking branch exits 1, compatible branch exits 0, new file
+  reports the honest reason. Dropping the refspec, reading the baseline from `HEAD`, or flattening
+  the `else` away each turns it red.
+
 ## [0.1.15] - 2026-11-02
 
 ### Fixed

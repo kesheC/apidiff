@@ -306,6 +306,50 @@ breaking change is still being rolled out.
 `--fail-on never`（等价于 `--allow-breaking`）永不返回 1，适合破坏性变更还在灰度、
 暂时不想卡住流水线的阶段。
 
+### As a GitHub Action
+
+The gate above needs a baseline, and a pull request only checks out the branch
+it is testing. Both details are load-bearing, so the step below spells them out:
+
+```yaml
+# actions/checkout@v5 already ran, on the default shallow single-branch fetch.
+- name: Contract gate
+  shell: bash
+  run: |
+    npm install --no-save --no-package-lock \
+      https://github.com/kesheC/apidiff/releases/latest/download/apidiff.tgz
+    git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+    baseline=$(mktemp)
+    if git show "origin/main:api/openapi.json" > "$baseline" 2>/dev/null; then
+      npx apidiff "$baseline" api/openapi.json
+    else
+      echo "api/openapi.json is new on this branch: there is no baseline yet"
+    fi
+```
+
+The snippet assumes nothing about `actions/checkout`: the default checkout is a
+shallow fetch of the one branch under test, and the step repairs that itself.
+Two details are load-bearing. First, `git fetch origin main` updates `FETCH_HEAD`
+and nothing else when only one ref is mapped, so the explicit
+`+refs/heads/main:refs/remotes/origin/main` refspec is what creates the
+`origin/main` that `git show` reads. Second, the `else` branch matters when the
+file is new: without it the step hands `apidiff` an empty file and fails with
+`error: invalid JSON` (exit `2`) instead of passing for the honest reason — there
+is nothing to compare against yet.
+
+Exit `1` fails the step, exit `0` passes it, exit `2` means apidiff could not read
+something and also fails it. That is deliberate: a gate that silently passes when
+it cannot do its job is not a gate.
+
+中文对照：这个 step 不假设 `actions/checkout` 的取法——默认就是浅取当前这一个分支，
+修复由 step 自己完成。两处容易写错：第一，只映射一个 ref 时裸 `git fetch origin main`
+只会写 `FETCH_HEAD`、不会建 `origin/main`，所以这里用显式 refspec
+`+refs/heads/main:refs/remotes/origin/main`。第二，
+文件是这次分支新增的、`main` 上根本没有时，必须有 `else` 分支——否则你会把空文件
+喂给 apidiff，得到 `error: invalid JSON`（退出 2），而不是「还没有基线可比较」这个
+诚实的结论。退出码含义：1 卡住流水线、0 放行、2 表示 apidiff 读不到东西（同样卡住）
+——能干活却没干活的门禁不算门禁。
+
 ### Errors go to stderr, and `--format json` stays JSON
 
 The verdict is data, so it owns stdout. Anything that makes the run fail (a bad
