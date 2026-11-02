@@ -58,7 +58,7 @@ body:
     attributes:
       label: apidiff version
       description: The output of `apidiff --version`.
-      placeholder: 0.1.16
+      placeholder: 0.1.17
     validations:
       required: true
 
