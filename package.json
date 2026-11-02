@@ -28,7 +28,7 @@
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build",
     "test": "vitest run",
-    "dev": "node --experimental-strip-types src/cli.ts",
+    "dev": "npm run build && node dist/cli.js",
     "prepack": "npm run build"
   },
   "keywords": [
